@@ -1,4 +1,10 @@
 import mongoose, { Schema, Types } from "mongoose";
+import type {
+  AttachmentKind,
+  CallMediaType,
+  CallType,
+  MessageType,
+} from "./Message.js";
 
 export interface IParticipant {
   userId: Types.ObjectId;
@@ -8,6 +14,28 @@ export interface IParticipant {
 export interface IGroup {
   name?: string;
   createdBy?: Types.ObjectId;
+  allowMembersToInvite?: boolean;
+  dissolvedAt?: Date;
+  dissolvedBy?: Types.ObjectId;
+}
+
+export interface ILastMessageCall {
+  callId: string;
+  callType: CallType;
+  mediaType: CallMediaType;
+  callerId: Types.ObjectId;
+  calleeId?: Types.ObjectId;
+  participantCount?: number;
+  reason: string;
+  durationSeconds: number;
+  startedAt: Date;
+  acceptedAt?: Date;
+  endedAt: Date;
+}
+
+export interface ILastMessageAttachment {
+  kind: AttachmentKind;
+  fileName: string;
 }
 
 export interface ILastMessage {
@@ -15,6 +43,10 @@ export interface ILastMessage {
   content?: string | null;
   senderId?: Types.ObjectId;
   createdAt?: Date | null;
+  messageType?: MessageType;
+  call?: ILastMessageCall;
+  attachment?: ILastMessageAttachment;
+  isRecalled?: boolean;
 }
 
 export interface IConversation {
@@ -25,6 +57,7 @@ export interface IConversation {
   seenBy: Types.ObjectId[];
   lastMessage?: ILastMessage | null;
   unreadCounts: Map<string, number>;
+  hiddenFor: Types.ObjectId[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -56,10 +89,96 @@ const groupSchema = new Schema<IGroup>(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    allowMembersToInvite: {
+      type: Boolean,
+      default: true,
+    },
+    dissolvedAt: {
+      type: Date,
+    },
+    dissolvedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     _id: false,
   }
+);
+
+const lastMessageCallSchema = new Schema<ILastMessageCall>(
+  {
+    callId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    callType: {
+      type: String,
+      enum: ["direct", "group"],
+      default: "direct",
+      required: true,
+    },
+    mediaType: {
+      type: String,
+      enum: ["audio", "video"],
+      required: true,
+    },
+    callerId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    calleeId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: function (this: ILastMessageCall): boolean {
+        return this.callType !== "group";
+      },
+    },
+    participantCount: {
+      type: Number,
+      min: 1,
+    },
+    reason: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    durationSeconds: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    startedAt: {
+      type: Date,
+      required: true,
+    },
+    acceptedAt: {
+      type: Date,
+    },
+    endedAt: {
+      type: Date,
+      required: true,
+    },
+  },
+  { _id: false }
+);
+
+const lastMessageAttachmentSchema = new Schema<ILastMessageAttachment>(
+  {
+    kind: {
+      type: String,
+      enum: ["image", "video", "file"],
+      required: true,
+    },
+    fileName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+  },
+  { _id: false }
 );
 
 const lastMessageSchema = new Schema<ILastMessage>(
@@ -76,6 +195,20 @@ const lastMessageSchema = new Schema<ILastMessage>(
     createdAt: {
       type: Date,
       default: null,
+    },
+    messageType: {
+      type: String,
+      enum: ["text", "call", "attachment", "system"],
+    },
+    call: {
+      type: lastMessageCallSchema,
+    },
+    attachment: {
+      type: lastMessageAttachmentSchema,
+    },
+    isRecalled: {
+      type: Boolean,
+      default: false,
     },
   },
   {
@@ -115,6 +248,12 @@ const conversationSchema = new Schema<IConversation>(
       of: Number,
       default: {},
     },
+    hiddenFor: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,

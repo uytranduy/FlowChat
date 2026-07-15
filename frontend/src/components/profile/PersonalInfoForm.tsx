@@ -11,6 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import type { User } from "@/types/user";
+import { useEffect, useState } from "react";
+import { userService } from "@/services/userService";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useChatStore } from "@/stores/useChatStore";
+import { toast } from "sonner";
 
 type EditableField = {
   key: keyof Pick<User, "displayName" | "username" | "email" | "phone">;
@@ -30,7 +35,37 @@ type Props = {
 };
 
 const PersonalInfoForm = ({ userInfo }: Props) => {
+  const setUser = useAuthStore((state) => state.setUser);
+  const [form, setForm] = useState({ displayName: "", username: "", email: "", phone: "", bio: "" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!userInfo) return;
+    setForm({
+      displayName: userInfo.displayName,
+      username: userInfo.username,
+      email: userInfo.email,
+      phone: userInfo.phone ?? "",
+      bio: userInfo.bio ?? "",
+    });
+  }, [userInfo]);
+
   if (!userInfo) return null;
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const user = await userService.updateProfile(form);
+      setUser(user);
+      await useChatStore.getState().fetchConversations();
+      toast.success("Đã lưu thông tin cá nhân.");
+    } catch (error) {
+      toast.error((error as { response?: { data?: { message?: string } } }).response?.data?.message || "Không thể cập nhật hồ sơ.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Card className="glass-strong border-border/30">
@@ -55,8 +90,8 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
               <Input
                 id={key}
                 type={type ?? "text"}
-                value={userInfo[key] ?? ""}
-                onChange={() => {}}
+                value={form[key]}
+                onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
                 className="glass-light border-border/30"
               />
             </div>
@@ -68,14 +103,15 @@ const PersonalInfoForm = ({ userInfo }: Props) => {
           <Textarea
             id="bio"
             rows={3}
-            value={userInfo.bio ?? ""}
-            onChange={() => {}}
+            value={form.bio}
+            maxLength={500}
+            onChange={(event) => setForm((current) => ({ ...current, bio: event.target.value }))}
             className="glass-light border-border/30 resize-none"
           />
         </div>
 
-        <Button className="w-full md:w-auto bg-gradient-primary hover:opacity-90 transition-opacity">
-          Lưu thay đổi
+        <Button disabled={saving} onClick={() => void save()} className="w-full md:w-auto bg-gradient-primary hover:opacity-90 transition-opacity">
+          {saving ? "Đang lưu..." : "Lưu thay đổi"}
         </Button>
       </CardContent>
     </Card>

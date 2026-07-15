@@ -18,6 +18,7 @@ export interface AuthState {
     lastName: string
   ) => Promise<void>;
   signIn: (username: string, password: string) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   fetchMe: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -40,40 +41,55 @@ export interface ChatState {
     }
   >;
   activeConversationId: string | null;
+  replyingTo: Message | null;
   convoLoading: boolean;
   messageLoading: boolean;
   loading: boolean;
   reset: () => void;
 
   setActiveConversation: (id: string | null) => void;
+  setReplyingTo: (message: Message | null) => void;
   fetchConversations: () => Promise<void>;
   fetchMessages: (conversationId?: string) => Promise<void>;
+  refreshLatestMessages: (conversationId?: string) => Promise<void>;
   sendDirectMessage: (
     recipientId: string,
     content: string,
-    imgUrl?: string
+    file?: File,
+    replyToMessageId?: string
   ) => Promise<void>;
   sendGroupMessage: (
     conversationId: string,
     content: string,
-    imgUrl?: string
+    file?: File,
+    replyToMessageId?: string
   ) => Promise<void>;
   // add message
   addMessage: (message: Message) => Promise<void>;
+  updateMessage: (message: Message) => void;
+  recallMessage: (messageId: string) => Promise<void>;
+  setReaction: (messageId: string, emoji: string) => Promise<void>;
+  removeReaction: (messageId: string) => Promise<void>;
+  forwardMessage: (messageId: string, conversationId: string) => Promise<void>;
   // update convo
   updateConversation: (conversation: Partial<Conversation> & { _id: string }) => void;
+  removeConversation: (conversationId: string) => void;
+  clearConversationMessages: (conversationId: string) => void;
   markAsSeen: () => Promise<void>;
   addConvo: (convo: Conversation) => void;
   createConversation: (
     type: "group" | "direct",
     name: string,
     memberIds: string[]
-  ) => Promise<void>;
+  ) => Promise<Conversation>;
 }
 
 export interface SocketState {
   socket: Socket | null;
+  isConnected: boolean;
   onlineUsers: string[];
+  relationshipRevision: number;
+  lastSeenByUser: Record<string, string>;
   connectSocket: () => void;
   disconnectSocket: () => void;
 }

@@ -17,7 +17,10 @@ interface FriendRequestDialogProps {
 
 const FriendRequestDialog = ({ open, setOpen }: FriendRequestDialogProps) => {
   const [tab, setTab] = useState("received");
-  const { getAllFriendRequests } = useFriendStore();
+  const getAllFriendRequests = useFriendStore(
+    (state) => state.getAllFriendRequests
+  );
+  const receivedCount = useFriendStore((state) => state.receivedList.length);
 
   useEffect(() => {
     const loadRequest = async () => {
@@ -28,8 +31,8 @@ const FriendRequestDialog = ({ open, setOpen }: FriendRequestDialogProps) => {
       }
     };
 
-    loadRequest();
-  }, []);
+    if (open) void loadRequest();
+  }, [getAllFriendRequests, open]);
 
   return (
     <Dialog
@@ -46,7 +49,14 @@ const FriendRequestDialog = ({ open, setOpen }: FriendRequestDialogProps) => {
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="received">Đã nhận</TabsTrigger>
+            <TabsTrigger value="received">
+              Đã nhận
+              {receivedCount > 0 && (
+                <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] leading-4 text-primary-foreground">
+                  {receivedCount > 99 ? "99+" : receivedCount}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="sent">Đã gửi</TabsTrigger>
           </TabsList>
 

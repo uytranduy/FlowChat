@@ -1,6 +1,13 @@
 import { Card } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatOnlineTime, cn } from "@/lib/utils";
-import { MoreHorizontal } from "lucide-react";
+import { CheckCheck, Info, MessageCircle, MoreHorizontal } from "lucide-react";
 
 interface ChatCardProps {
   convoId: string;
@@ -11,6 +18,9 @@ interface ChatCardProps {
   unreadCount?: number;
   leftSection: React.ReactNode;
   subtitle: React.ReactNode;
+  infoLabel: string;
+  onOpenInfo: () => void;
+  onMarkAsRead?: () => void;
 }
 
 const ChatCard = ({
@@ -22,6 +32,9 @@ const ChatCard = ({
   unreadCount,
   leftSection,
   subtitle,
+  infoLabel,
+  onOpenInfo,
+  onMarkAsRead,
 }: ChatCardProps) => {
   return (
     <Card
@@ -54,7 +67,42 @@ const ChatCard = ({
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1 flex-1 min-w-0">{subtitle}</div>
-            <MoreHorizontal className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 hover:size-5 transition-smooth" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="-mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Hành động với ${name}`}
+                  title="Hành động khác"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-52"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <DropdownMenuItem onSelect={() => onSelect(convoId)}>
+                  <MessageCircle />
+                  Mở cuộc trò chuyện
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onOpenInfo}>
+                  <Info />
+                  {infoLabel}
+                </DropdownMenuItem>
+                {onMarkAsRead && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={onMarkAsRead}>
+                      <CheckCheck />
+                      Đánh dấu đã đọc
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

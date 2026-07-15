@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Label } from "../ui/label";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useNavigate } from "react-router";
+import { GoogleSignInButton } from "./google-sign-in-button";
 
 const signUpSchema = z.object({
   firstname: z.string().min(1, "Tên bắt buộc phải có"),
@@ -20,7 +21,7 @@ const signUpSchema = z.object({
 type SignUpFormValues = z.infer<typeof signUpSchema>;
 
 export function SignupForm({ className, ...props }: React.ComponentProps<"div">) {
-  const { signUp } = useAuthStore();
+  const { signUp, signInWithGoogle, loading } = useAuthStore();
   const navigate = useNavigate();
   const {
     register,
@@ -37,6 +38,10 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
     await signUp(username, password, email, firstname, lastname);
 
     navigate("/signin");
+  };
+
+  const onGoogleCredential = async (idToken: string) => {
+    if (await signInWithGoogle(idToken)) navigate("/");
   };
 
   return (
@@ -170,6 +175,17 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
               >
                 Tạo tài khoản
               </Button>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                hoặc
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <GoogleSignInButton
+                label="signup_with"
+                disabled={isSubmitting || loading}
+                onCredential={onGoogleCredential}
+              />
 
               <div className="text-center text-sm">
                 Đã có tài khoản?{" "}

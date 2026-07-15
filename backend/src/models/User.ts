@@ -2,13 +2,17 @@ import mongoose, { Schema } from "mongoose";
 
 export interface IUser {
   username: string;
-  hashedPassword: string;
+  hashedPassword?: string;
+  googleId?: string;
   email: string;
   displayName: string;
   avatarUrl?: string;
   avatarId?: string;
   bio?: string;
   phone?: string;
+  showOnlineStatus?: boolean;
+  notificationsEnabled?: boolean;
+  lastSeenAt?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -24,7 +28,12 @@ const userSchema = new Schema<IUser>(
     },
     hashedPassword: {
       type: String,
-      required: true,
+    },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
     },
     email: {
       type: String,
@@ -51,6 +60,17 @@ const userSchema = new Schema<IUser>(
     phone: {
       type: String,
       sparse: true,
+    },
+    showOnlineStatus: {
+      type: Boolean,
+      default: true,
+    },
+    notificationsEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    lastSeenAt: {
+      type: Date,
     },
   },
   {

@@ -4,12 +4,12 @@ import { Ellipsis } from "lucide-react";
 
 interface GroupChatAvatarProps {
   participants: Participant[];
-  type: "chat" | "sidebar";
+  type: "chat" | "sidebar" | "profile";
 }
 
 const GroupChatAvatar = ({ participants, type }: GroupChatAvatarProps) => {
   const avatars = [];
-  const limit = Math.min(participants.length, 4);
+  const limit = Math.min(participants.length, type === "profile" ? 3 : 4);
 
   for (let i = 0; i < limit; i++) {
     const member = participants[i];
@@ -29,7 +29,15 @@ const GroupChatAvatar = ({ participants, type }: GroupChatAvatarProps) => {
 
       {/* nếu nhiều hơn 4 avatar thì render dấu ... */}
       {participants.length > limit && (
-        <div className="flex items-center z-10 justify-center size-8 rounded-full bg-muted ring-2 ring-background text-muted-foreground">
+        <div
+          className={`flex items-center z-10 justify-center rounded-full bg-muted ring-2 ring-background text-muted-foreground ${
+            type === "profile"
+              ? "size-24"
+              : type === "sidebar"
+                ? "size-12"
+                : "size-8"
+          }`}
+        >
           <Ellipsis className="size-4" />
         </div>
       )}

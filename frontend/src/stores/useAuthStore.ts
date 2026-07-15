@@ -60,6 +60,24 @@ export const useAuthStore = create<AuthState>()(
           set({ loading: false });
         }
       },
+      signInWithGoogle: async (idToken) => {
+        try {
+          get().clearState();
+          set({ loading: true });
+          const { accessToken } = await authService.signInWithGoogle(idToken);
+          get().setAccessToken(accessToken);
+          await get().fetchMe();
+          await useChatStore.getState().fetchConversations();
+          toast.success("Đăng nhập bằng Google thành công 🎉");
+          return true;
+        } catch (error) {
+          console.error(error);
+          toast.error("Đăng nhập bằng Google không thành công!");
+          return false;
+        } finally {
+          set({ loading: false });
+        }
+      },
       signOut: async () => {
         try {
           get().clearState();

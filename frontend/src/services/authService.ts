@@ -26,6 +26,15 @@ export const authService = {
     return res.data; // access token
   },
 
+  signInWithGoogle: async (idToken: string) => {
+    const res = await api.post(
+      "/auth/google",
+      { idToken },
+      { withCredentials: true }
+    );
+    return res.data;
+  },
+
   signOut: async () => {
     return api.post("/auth/signout", { withCredentials: true });
   },

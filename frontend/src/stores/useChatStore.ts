@@ -5,22 +5,40 @@ import { persist } from "zustand/middleware";
 import { useAuthStore } from "./useAuthStore";
 import { useSocketStore } from "./useSocketStore";
 
+function mergeMessages(
+  current: ChatState["messages"][string]["items"],
+  incoming: ChatState["messages"][string]["items"]
+) {
+  const byId = new Map(current.map((message) => [message._id, message]));
+  incoming.forEach((message) => byId.set(message._id, message));
+
+  return Array.from(byId.values()).sort((left, right) => {
+    const byCreatedAt =
+      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    return byCreatedAt || left._id.localeCompare(right._id);
+  });
+}
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
       conversations: [],
       messages: {},
       activeConversationId: null,
+      replyingTo: null,
       convoLoading: false, // convo loading
       messageLoading: false,
       loading: false,
 
-      setActiveConversation: (id) => set({ activeConversationId: id }),
+      setActiveConversation: (id) =>
+        set({ activeConversationId: id, replyingTo: null }),
+      setReplyingTo: (message) => set({ replyingTo: message }),
       reset: () => {
         set({
           conversations: [],
           messages: {},
           activeConversationId: null,
+          replyingTo: null,
           convoLoading: false,
           messageLoading: false,
         });
@@ -84,14 +102,93 @@ export const useChatStore = create<ChatState>()(
           set({ messageLoading: false });
         }
       },
-      sendDirectMessage: async (recipientId, content, imgUrl) => {
+      refreshLatestMessages: async (conversationId) => {
+        const convoId = conversationId ?? get().activeConversationId;
+        const { user } = useAuthStore.getState();
+        if (!convoId) return;
+
+        try {
+          const { messages: fetched, cursor } =
+            await chatService.fetchMessages(convoId);
+          const processed = fetched.map((message) => ({
+            ...message,
+            isOwn: message.senderId === user?._id,
+          }));
+
+          set((state) => {
+            const current = state.messages[convoId];
+            const latest = processed.at(-1);
+            return {
+              messages: {
+                ...state.messages,
+                [convoId]: {
+                  items: mergeMessages(current?.items ?? [], processed),
+                  // `nextCursor` points to the oldest loaded page. Refreshing
+                  // the newest page must not reset older-message pagination.
+                  hasMore: current?.hasMore ?? Boolean(cursor),
+                  nextCursor: current
+                    ? current.nextCursor
+                    : (cursor ?? null),
+                },
+              },
+              conversations: latest
+                ? state.conversations.map((conversation) => {
+                    if (conversation._id !== convoId) return conversation;
+
+                    const currentLastTime = conversation.lastMessage?.createdAt
+                      ? new Date(conversation.lastMessage.createdAt).getTime()
+                      : 0;
+                    const latestTime = new Date(latest.createdAt).getTime();
+                    if (currentLastTime > latestTime) return conversation;
+
+                    const sender = conversation.participants.find(
+                      (participant) => participant._id === latest.senderId
+                    );
+                    return {
+                      ...conversation,
+                      lastMessageAt: latest.createdAt,
+                      lastMessage: {
+                        _id: latest._id,
+                        content: latest.content,
+                        createdAt: latest.createdAt,
+                        messageType: latest.messageType,
+                        call: latest.call,
+                        attachment: latest.attachment,
+                        isRecalled: latest.isRecalled,
+                        senderId: latest.senderId,
+                        ...(sender
+                          ? {
+                              sender: {
+                                _id: sender._id,
+                                displayName: sender.displayName,
+                                avatarUrl: sender.avatarUrl,
+                              },
+                            }
+                          : {}),
+                      },
+                    };
+                  })
+                : state.conversations,
+            };
+          });
+        } catch (error) {
+          console.error("Lỗi xảy ra khi làm mới tin nhắn mới nhất:", error);
+        }
+      },
+      sendDirectMessage: async (
+        recipientId,
+        content,
+        file,
+        replyToMessageId
+      ) => {
         try {
           const { activeConversationId } = get();
           await chatService.sendDirectMessage(
             recipientId,
             content,
-            imgUrl,
-            activeConversationId || undefined
+            file,
+            activeConversationId || undefined,
+            replyToMessageId
           );
           set((state) => ({
             conversations: state.conversations.map((c) =>
@@ -100,11 +197,22 @@ export const useChatStore = create<ChatState>()(
           }));
         } catch (error) {
           console.error("Lỗi xảy ra khi gửi direct message", error);
+          throw error;
         }
       },
-      sendGroupMessage: async (conversationId, content, imgUrl) => {
+      sendGroupMessage: async (
+        conversationId,
+        content,
+        file,
+        replyToMessageId
+      ) => {
         try {
-          await chatService.sendGroupMessage(conversationId, content, imgUrl);
+          await chatService.sendGroupMessage(
+            conversationId,
+            content,
+            file,
+            replyToMessageId
+          );
           set((state) => ({
             conversations: state.conversations.map((c) =>
               c._id === get().activeConversationId ? { ...c, seenBy: [] } : c
@@ -112,6 +220,7 @@ export const useChatStore = create<ChatState>()(
           }));
         } catch (error) {
           console.error("Lỗi xảy ra gửi group message", error);
+          throw error;
         }
       },
       addMessage: async (message) => {
@@ -150,11 +259,128 @@ export const useChatStore = create<ChatState>()(
           console.error("Lỗi xảy khi ra add message:", error);
         }
       },
-      updateConversation: (conversation) => {
+      updateMessage: (message) => {
+        const { user } = useAuthStore.getState();
+        const normalized = {
+          ...message,
+          isOwn: message.senderId === user?._id,
+        };
+
         set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c._id === conversation._id ? { ...c, ...conversation } : c
+          replyingTo:
+            state.replyingTo?._id === normalized._id
+              ? normalized.isRecalled
+                ? null
+                : { ...state.replyingTo, ...normalized }
+              : state.replyingTo,
+          messages: Object.fromEntries(
+            Object.entries(state.messages).map(([conversationId, page]) => [
+              conversationId,
+              {
+                ...page,
+                items: page.items.map((item) => {
+                  if (item._id === normalized._id) {
+                    return { ...item, ...normalized };
+                  }
+
+                  if (item.replyTo?.messageId === normalized._id) {
+                    return {
+                      ...item,
+                      replyTo: {
+                        ...item.replyTo,
+                        content: normalized.content,
+                        isRecalled: Boolean(normalized.isRecalled),
+                      },
+                    };
+                  }
+
+                  return item;
+                }),
+              },
+            ])
           ),
+          conversations: state.conversations.map((conversation) =>
+            conversation.lastMessage?._id === normalized._id
+              ? {
+                  ...conversation,
+                  lastMessage: {
+                    ...conversation.lastMessage,
+                    content: normalized.isRecalled
+                      ? "Tin nhắn đã thu hồi"
+                      : normalized.content,
+                    messageType: normalized.messageType,
+                    call: normalized.call,
+                    attachment: normalized.attachment,
+                    isRecalled: normalized.isRecalled,
+                  },
+                }
+              : conversation
+          ),
+        }));
+      },
+      recallMessage: async (messageId) => {
+        const message = await chatService.recallMessage(messageId);
+        get().updateMessage(message);
+      },
+      setReaction: async (messageId, emoji) => {
+        const message = await chatService.setReaction(messageId, emoji);
+        get().updateMessage(message);
+      },
+      removeReaction: async (messageId) => {
+        const message = await chatService.removeReaction(messageId);
+        get().updateMessage(message);
+      },
+      forwardMessage: async (messageId, conversationId) => {
+        const message = await chatService.forwardMessage(
+          messageId,
+          conversationId
+        );
+        await get().addMessage(message);
+      },
+      updateConversation: (conversation) => {
+        set((state) => {
+          const conversations = state.conversations.map((current) =>
+            current._id === conversation._id
+              ? { ...current, ...conversation }
+              : current
+          );
+
+          conversations.sort(
+            (a, b) =>
+              new Date(b.lastMessageAt || b.updatedAt).getTime() -
+              new Date(a.lastMessageAt || a.updatedAt).getTime()
+          );
+
+          return { conversations };
+        });
+      },
+      removeConversation: (conversationId) => {
+        set((state) => ({
+          conversations: state.conversations.filter(
+            (conversation) => conversation._id !== conversationId
+          ),
+          activeConversationId:
+            state.activeConversationId === conversationId
+              ? null
+              : state.activeConversationId,
+          messages: Object.fromEntries(
+            Object.entries(state.messages).filter(
+              ([id]) => id !== conversationId
+            )
+          ),
+        }));
+      },
+      clearConversationMessages: (conversationId) => {
+        set((state) => ({
+          messages: Object.fromEntries(
+            Object.entries(state.messages).filter(
+              ([id]) => id !== conversationId
+            )
+          ),
+          replyingTo:
+            state.replyingTo?.conversationId === conversationId
+              ? null
+              : state.replyingTo,
         }));
       },
       markAsSeen: async () => {
@@ -223,8 +449,10 @@ export const useChatStore = create<ChatState>()(
           useSocketStore
             .getState()
             .socket?.emit("join-conversation", conversation._id);
+          return conversation;
         } catch (error) {
           console.error("Lỗi xảy ra khi gọi createConversation trong store", error);
+          throw error;
         } finally {
           set({ loading: false });
         }
