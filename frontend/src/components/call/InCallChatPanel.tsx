@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, LoaderCircle, Paperclip, Send, X } from "lucide-react";
+import {
+  FileText,
+  LoaderCircle,
+  Paperclip,
+  Send,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { chatService } from "@/services/chatService";
 import { useChatStore } from "@/stores/useChatStore";
 import type { Message } from "@/types/chat";
@@ -180,6 +193,8 @@ function CallChatMessage({
   own: boolean;
   senderName?: string;
 }) {
+  const [imageOpen, setImageOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const attachment = message.attachment;
   const preview = message.isRecalled
     ? "Tin nhắn đã thu hồi"
@@ -200,13 +215,70 @@ function CallChatMessage({
           </p>
         )}
         {attachment?.kind === "image" && (
-          <a href={attachment.url} target="_blank" rel="noreferrer">
-            <img
-              src={attachment.url}
-              alt={attachment.fileName}
-              className="mb-1 max-h-44 w-full rounded-lg object-contain"
-            />
-          </a>
+          <>
+            <button
+              type="button"
+              className="mb-1 block w-full cursor-zoom-in overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              title="Phóng to ảnh"
+              onClick={() => {
+                setZoom(1);
+                setImageOpen(true);
+              }}
+            >
+              <img
+                src={attachment.url}
+                alt={attachment.fileName}
+                loading="lazy"
+                className="max-h-44 w-full object-contain transition-transform hover:scale-[1.02]"
+              />
+            </button>
+            <Dialog open={imageOpen} onOpenChange={setImageOpen}>
+              <DialogContent className="h-[94vh] w-[96vw] max-w-none overflow-hidden border-0 bg-black/95 p-0 text-white">
+                <DialogTitle className="sr-only">
+                  {attachment.fileName || "Xem ảnh"}
+                </DialogTitle>
+                <div className="absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/65 p-1 shadow-lg">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="text-white hover:bg-white/15 hover:text-white"
+                    disabled={zoom <= 0.5}
+                    title="Thu nhỏ"
+                    onClick={() =>
+                      setZoom((value) => Math.max(0.5, value - 0.25))
+                    }
+                  >
+                    <ZoomOut />
+                  </Button>
+                  <span className="min-w-14 text-center text-sm">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="text-white hover:bg-white/15 hover:text-white"
+                    disabled={zoom >= 3}
+                    title="Phóng to"
+                    onClick={() =>
+                      setZoom((value) => Math.min(3, value + 0.25))
+                    }
+                  >
+                    <ZoomIn />
+                  </Button>
+                </div>
+                <div className="flex h-full w-full items-center justify-center overflow-auto p-10">
+                  <img
+                    src={attachment.url}
+                    alt={attachment.fileName || "Ảnh đã gửi"}
+                    className="max-h-full max-w-full select-none object-contain transition-transform"
+                    style={{ transform: `scale(${zoom})` }}
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
+          </>
         )}
         {attachment?.kind === "video" && (
           <video

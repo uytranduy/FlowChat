@@ -15,6 +15,7 @@ export interface IGroup {
   name?: string;
   createdBy?: Types.ObjectId;
   allowMembersToInvite?: boolean;
+  allowMembersToRename?: boolean;
   dissolvedAt?: Date;
   dissolvedBy?: Types.ObjectId;
 }
@@ -90,6 +91,10 @@ const groupSchema = new Schema<IGroup>(
       ref: "User",
     },
     allowMembersToInvite: {
+      type: Boolean,
+      default: true,
+    },
+    allowMembersToRename: {
       type: Boolean,
       default: true,
     },

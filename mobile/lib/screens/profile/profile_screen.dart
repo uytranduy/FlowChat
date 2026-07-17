@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/config/app_config.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/flow_chat_logo.dart';
@@ -80,94 +80,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _editProfile(User user) async {
-    final displayName = TextEditingController(text: user.displayName);
-    final username = TextEditingController(text: user.username);
-    final email = TextEditingController(text: user.email);
-    final phone = TextEditingController(text: user.phone ?? '');
-    final bio = TextEditingController(text: user.bio ?? '');
-    final formKey = GlobalKey<FormState>();
     final values = await showDialog<List<String>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Chỉnh sửa thông tin'),
-        content: SizedBox(
-          width: 460,
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: displayName,
-                    decoration: const InputDecoration(
-                      labelText: 'Tên hiển thị',
-                    ),
-                    validator: (value) => value?.trim().isEmpty == true
-                        ? 'Không được để trống'
-                        : null,
-                  ),
-                  TextFormField(
-                    controller: username,
-                    decoration: const InputDecoration(
-                      labelText: 'Tên người dùng',
-                    ),
-                    validator: (value) => value?.trim().isEmpty == true
-                        ? 'Không được để trống'
-                        : null,
-                  ),
-                  TextFormField(
-                    controller: email,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    validator: (value) => value?.contains('@') != true
-                        ? 'Email không hợp lệ'
-                        : null,
-                  ),
-                  TextFormField(
-                    controller: phone,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Số điện thoại',
-                    ),
-                  ),
-                  TextFormField(
-                    controller: bio,
-                    maxLength: 500,
-                    maxLines: 3,
-                    decoration: const InputDecoration(labelText: 'Giới thiệu'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Huỷ'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() != true) return;
-              Navigator.pop(dialogContext, [
-                displayName.text,
-                username.text,
-                email.text,
-                phone.text,
-                bio.text,
-              ]);
-            },
-            child: const Text('Lưu'),
-          ),
-        ],
-      ),
+      builder: (_) => _EditProfileDialog(user: user),
     );
-    displayName.dispose();
-    username.dispose();
-    email.dispose();
-    phone.dispose();
-    bio.dispose();
     if (values == null || !mounted) return;
     final controller = context.read<AppController>();
     final success = await controller.updateProfile(
@@ -190,70 +106,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changePassword() async {
-    final current = TextEditingController();
-    final next = TextEditingController();
-    final confirm = TextEditingController();
     final values = await showDialog<List<String>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Đổi mật khẩu'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: current,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Mật khẩu hiện tại'),
-            ),
-            TextField(
-              controller: next,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Mật khẩu mới (ít nhất 8 ký tự)',
-              ),
-            ),
-            TextField(
-              controller: confirm,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Xác nhận mật khẩu mới',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Huỷ'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (next.text.length < 8) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Mật khẩu mới phải có ít nhất 8 ký tự.'),
-                  ),
-                );
-                return;
-              }
-              if (next.text != confirm.text) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Mật khẩu xác nhận không khớp.'),
-                  ),
-                );
-                return;
-              }
-              Navigator.pop(dialogContext, [current.text, next.text]);
-            },
-            child: const Text('Đổi mật khẩu'),
-          ),
-        ],
-      ),
+      builder: (_) => const _ChangePasswordDialog(),
     );
-    current.dispose();
-    next.dispose();
-    confirm.dispose();
     if (values == null || !mounted) return;
     final controller = context.read<AppController>();
     final success = await controller.changePassword(
@@ -532,17 +388,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       : (value) =>
                             _updatePreference(notificationsEnabled: value),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.dns_outlined),
-                  title: const Text('REST API'),
-                  subtitle: Text(
-                    AppConfig.apiBaseUrl,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -552,9 +397,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.password_rounded),
-                  title: const Text('Đổi mật khẩu'),
+                  title: Text(
+                    user?.usesGoogleAuth == true
+                        ? 'Quản lý mật khẩu Google'
+                        : 'Đổi mật khẩu',
+                  ),
+                  subtitle: user?.usesGoogleAuth == true
+                      ? const Text('Tài khoản này không có mật khẩu FlowChat')
+                      : null,
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: _changePassword,
+                  onTap: user?.usesGoogleAuth == true
+                      ? () => launchUrl(
+                          Uri.parse(
+                            'https://accounts.google.com/signin/recovery',
+                          ),
+                          mode: LaunchMode.externalApplication,
+                        )
+                      : _changePassword,
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -588,6 +447,193 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EditProfileDialog extends StatefulWidget {
+  const _EditProfileDialog({required this.user});
+
+  final User user;
+
+  @override
+  State<_EditProfileDialog> createState() => _EditProfileDialogState();
+}
+
+class _EditProfileDialogState extends State<_EditProfileDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _displayName;
+  late final TextEditingController _username;
+  late final TextEditingController _email;
+  late final TextEditingController _phone;
+  late final TextEditingController _bio;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = widget.user;
+    _displayName = TextEditingController(text: user.displayName);
+    _username = TextEditingController(text: user.username);
+    _email = TextEditingController(text: user.email);
+    _phone = TextEditingController(text: user.phone ?? '');
+    _bio = TextEditingController(text: user.bio ?? '');
+  }
+
+  @override
+  void dispose() {
+    _displayName.dispose();
+    _username.dispose();
+    _email.dispose();
+    _phone.dispose();
+    _bio.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_formKey.currentState?.validate() != true) return;
+    Navigator.pop(context, [
+      _displayName.text,
+      _username.text,
+      _email.text,
+      _phone.text,
+      _bio.text,
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Chỉnh sửa thông tin'),
+      content: SizedBox(
+        width: 460,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _displayName,
+                  decoration: const InputDecoration(labelText: 'Tên hiển thị'),
+                  validator: (value) => value?.trim().isEmpty == true
+                      ? 'Không được để trống'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _username,
+                  decoration: const InputDecoration(
+                    labelText: 'Tên người dùng',
+                  ),
+                  validator: (value) => value?.trim().isEmpty == true
+                      ? 'Không được để trống'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  validator: (value) => value?.contains('@') != true
+                      ? 'Email không hợp lệ'
+                      : null,
+                ),
+                TextFormField(
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Số điện thoại'),
+                ),
+                TextFormField(
+                  controller: _bio,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Giới thiệu'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Huỷ'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Lưu')),
+      ],
+    );
+  }
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog();
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_next.text.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mật khẩu mới phải có ít nhất 8 ký tự.')),
+      );
+      return;
+    }
+    if (_next.text != _confirm.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mật khẩu xác nhận không khớp.')),
+      );
+      return;
+    }
+    Navigator.pop(context, [_current.text, _next.text]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Đổi mật khẩu'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _current,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Mật khẩu hiện tại'),
+          ),
+          TextField(
+            controller: _next,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Mật khẩu mới (ít nhất 8 ký tự)',
+            ),
+          ),
+          TextField(
+            controller: _confirm,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Xác nhận mật khẩu mới',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Huỷ'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Đổi mật khẩu')),
+      ],
     );
   }
 }

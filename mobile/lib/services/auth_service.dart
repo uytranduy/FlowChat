@@ -13,7 +13,7 @@ class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   bool _googleInitialized = false;
 
-  Future<void> signUp({
+  Future<String> signUp({
     required String username,
     required String password,
     required String email,
@@ -31,7 +31,31 @@ class AuthService {
       },
       options: _apiClient.publicOptions(),
     );
-    _apiClient.responseMap(response);
+    final body = _apiClient.responseMap(response);
+    return nullableString(body['message']) ??
+        'Đăng ký thành công. Vui lòng kiểm tra email để xác minh tài khoản.';
+  }
+
+  Future<String> requestPasswordReset(String email) async {
+    final response = await _apiClient.post<dynamic>(
+      'auth/forgot-password',
+      data: {'email': email.trim()},
+      options: _apiClient.publicOptions(),
+    );
+    final body = _apiClient.responseMap(response);
+    return nullableString(body['message']) ??
+        'Nếu email tồn tại, FlowChat đã gửi liên kết đặt lại mật khẩu.';
+  }
+
+  Future<String> resendVerification(String email) async {
+    final response = await _apiClient.post<dynamic>(
+      'auth/resend-verification',
+      data: {'email': email.trim()},
+      options: _apiClient.publicOptions(),
+    );
+    final body = _apiClient.responseMap(response);
+    return nullableString(body['message']) ??
+        'Nếu email đang chờ xác minh, FlowChat đã gửi một liên kết mới.';
   }
 
   Future<String> signIn({
@@ -63,8 +87,7 @@ class AuthService {
     final clientId = AppConfig.googleWebClientId.trim();
     if (clientId.isEmpty) {
       throw const ApiException(
-        message:
-            'Thiếu GOOGLE_WEB_CLIENT_ID. Hãy chạy app với --dart-define.',
+        message: 'Thiếu GOOGLE_WEB_CLIENT_ID. Hãy chạy app với --dart-define.',
       );
     }
 
@@ -83,8 +106,7 @@ class AuthService {
       final idToken = account.authentication.idToken?.trim();
       if (idToken == null || idToken.isEmpty) {
         throw const ApiException(
-          message:
-              'Google không trả về ID token. Hãy kiểm tra Web Client ID.',
+          message: 'Google không trả về ID token. Hãy kiểm tra Web Client ID.',
         );
       }
 

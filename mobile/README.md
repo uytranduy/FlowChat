@@ -64,6 +64,14 @@ cd android
 Android không cần chép `google-services.json` vì ứng dụng truyền trực tiếp Web
 Client ID làm `serverClientId`.
 
+### Xác minh email và quên mật khẩu
+
+Mobile có thể yêu cầu gửi email xác minh hoặc đặt lại mật khẩu. Liên kết trong
+Gmail mở giao diện web được cấu hình bởi `APP_PUBLIC_URL` trong `backend/.env`.
+Khi thử trên điện thoại thật, không đặt biến này là `localhost`; hãy dùng domain
+HTTPS công khai hoặc địa chỉ LAN mà điện thoại truy cập được. Cấu hình SMTP được
+mô tả trong `frontend/README.md` và `backend/.env.example`.
+
 ### Android Emulator
 
 Android Emulator truy cập máy host bằng `10.0.2.2`, không phải `localhost`:

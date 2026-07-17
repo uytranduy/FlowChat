@@ -76,6 +76,8 @@ export interface IMessage {
   replyTo?: IReplyToMessage;
   reactions: IMessageReaction[];
   forwardedFrom?: IForwardedFrom;
+  pinnedAt?: Date;
+  pinnedBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -372,6 +374,13 @@ const messageSchema = new Schema<IMessage>(
     forwardedFrom: {
       type: forwardedFromSchema,
     },
+    pinnedAt: {
+      type: Date,
+    },
+    pinnedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     timestamps: true,
@@ -379,6 +388,7 @@ const messageSchema = new Schema<IMessage>(
 );
 
 messageSchema.index({ conversationId: 1, createdAt: -1 });
+messageSchema.index({ conversationId: 1, pinnedAt: -1 });
 
 const Message = mongoose.model<IMessage>("Message", messageSchema);
 export default Message;

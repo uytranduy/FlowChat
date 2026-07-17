@@ -38,6 +38,53 @@ class ChatService {
     return MessagePage.fromJson(_apiClient.responseMap(response));
   }
 
+  Future<List<Message>> searchMessages(
+    String conversationId,
+    String query,
+  ) async {
+    final response = await _apiClient.get<dynamic>(
+      'conversations/$conversationId/messages/search',
+      queryParameters: {'q': query.trim(), 'limit': 50},
+    );
+    return jsonList(
+      _apiClient.responseMap(response)['messages'],
+    ).map(Message.tryParse).whereType<Message>().toList(growable: false);
+  }
+
+  Future<List<Message>> getPinnedMessages(String conversationId) async {
+    final response = await _apiClient.get<dynamic>(
+      'conversations/$conversationId/pinned-messages',
+    );
+    return jsonList(
+      _apiClient.responseMap(response)['messages'],
+    ).map(Message.tryParse).whereType<Message>().toList(growable: false);
+  }
+
+  Future<List<Message>> getConversationAttachments(
+    String conversationId,
+  ) async {
+    final response = await _apiClient.get<dynamic>(
+      'conversations/$conversationId/attachments',
+    );
+    return jsonList(_apiClient.responseMap(response)['messages'])
+        .map(Message.tryParse)
+        .whereType<Message>()
+        .where((message) => message.attachment != null)
+        .toList(growable: false);
+  }
+
+  Future<Message> updateMessagePin(
+    String conversationId,
+    String messageId,
+    bool pinned,
+  ) async {
+    final response = await _apiClient.patch<dynamic>(
+      'conversations/$conversationId/messages/$messageId/pin',
+      data: {'pinned': pinned},
+    );
+    return _messageFromResponse(response);
+  }
+
   Future<Message> sendDirectMessage(
     String recipientId,
     String content, {
@@ -211,6 +258,33 @@ class ChatService {
     );
     if (conversation != null) return conversation;
     throw _invalidResponse(response, 'Không thể đọc quyền nhóm vừa cập nhật.');
+  }
+
+  Future<Conversation> updateGroupRenamePermission(
+    String conversationId,
+    bool allowMembersToRename,
+  ) async {
+    final response = await _apiClient.patch<dynamic>(
+      'conversations/$conversationId/group-settings',
+      data: {'allowMembersToRename': allowMembersToRename},
+    );
+    final conversation = Conversation.tryParse(
+      _apiClient.responseMap(response)['conversation'],
+    );
+    if (conversation != null) return conversation;
+    throw _invalidResponse(response, 'Không thể đọc quyền nhóm vừa cập nhật.');
+  }
+
+  Future<Conversation> renameGroup(String conversationId, String name) async {
+    final response = await _apiClient.patch<dynamic>(
+      'conversations/$conversationId/group-name',
+      data: {'name': name.trim()},
+    );
+    final conversation = Conversation.tryParse(
+      _apiClient.responseMap(response)['conversation'],
+    );
+    if (conversation != null) return conversation;
+    throw _invalidResponse(response, 'Không thể đọc tên nhóm vừa cập nhật.');
   }
 
   Future<void> leaveGroup(String conversationId) async {

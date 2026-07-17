@@ -7,6 +7,7 @@ import Message, {
   type CallMediaType,
   type ICallParticipant,
 } from "../models/Message.js";
+import User from "../models/User.js";
 import {
   emitNewMessage,
   getLastMessageSnapshot,
@@ -1428,15 +1429,36 @@ export class CallSignaling {
         return;
       }
 
-      const calleeSocketIds = new Set(
+      let calleeSocketIds = new Set(
         Array.from(this.onlineUsers.get(payload.calleeId) ?? []).filter(
           (socketId) => this.io.sockets.sockets.has(socketId)
         )
       );
 
       if (calleeSocketIds.size === 0) {
-        acknowledgeError(ack, "CALLEE_OFFLINE", "Người nhận hiện không trực tuyến");
-        return;
+        const callee = await User.findById(payload.calleeId)
+          .select("displayName username")
+          .lean();
+        calleeSocketIds = new Set(
+          Array.from(this.onlineUsers.get(payload.calleeId) ?? []).filter(
+            (socketId) => this.io.sockets.sockets.has(socketId)
+          )
+        );
+
+        // The user may reconnect while their display name is being loaded.
+        if (calleeSocketIds.size === 0) {
+          const calleeName =
+            callee?.displayName?.trim() ||
+            callee?.username?.trim() ||
+            "này";
+
+          acknowledgeError(
+            ack,
+            "CALLEE_OFFLINE",
+            `Người dùng ${calleeName} hiện đã đăng xuất khỏi tài khoản nên không thể nhận cuộc gọi.`
+          );
+          return;
+        }
       }
 
       const callId = randomUUID();

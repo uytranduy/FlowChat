@@ -588,6 +588,8 @@ export const recallMessage = async (req: Request, res: Response): Promise<any> =
       content: "",
     });
     message.set("imgUrl", undefined);
+    message.set("pinnedAt", undefined);
+    message.set("pinnedBy", undefined);
     // Soft recall: remove the client-facing reference but never delete the
     // Cloudinary asset or the message record here.
     message.set("attachment", undefined);

@@ -46,6 +46,27 @@ Khởi động lại backend và frontend sau khi sửa biến môi trường. B
 minh Google ID token trước khi tạo tài khoản hoặc đăng nhập; frontend không tự
 tin email/profile do trình duyệt gửi lên.
 
+## Xác minh email và quên mật khẩu
+
+FlowChat gửi liên kết xác minh khi đăng ký bằng email và liên kết đặt lại mật
+khẩu có hiệu lực 30 phút. Với Gmail SMTP, bật xác minh 2 bước, tạo **Mật khẩu
+ứng dụng**, rồi cấu hình `backend/.env`:
+
+```env
+APP_PUBLIC_URL=http://localhost:5173
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-16-character-app-password
+SMTP_FROM="FlowChat <your-email@gmail.com>"
+```
+
+`SMTP_PASS` không phải mật khẩu Gmail thông thường và không được commit vào
+Git. Trong production, `APP_PUBLIC_URL` phải là địa chỉ HTTPS công khai của web.
+Tài khoản chỉ dùng Google không có mật khẩu FlowChat; việc khôi phục mật khẩu
+được thực hiện tại Google.
+
 Nút gọi chỉ xuất hiện trong hội thoại trực tiếp. Trình duyệt sẽ yêu cầu quyền microphone khi gọi hoặc nhận máy.
 
 ## STUN/TURN cho cuộc gọi

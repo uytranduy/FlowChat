@@ -441,18 +441,26 @@ String _statusText(CallController call) {
       final seconds = (call.elapsed.inSeconds % 60).toString().padLeft(2, '0');
       return '$minutes:$seconds';
     case VoiceCallStatus.ended:
-      final ended = _endedText(call.endedReason, call.mediaType);
+      final ended = _endedText(
+        call.endedReason,
+        call.mediaType,
+        call.peer?.displayName,
+      );
       if (call.endedDurationSeconds <= 0) return ended;
       return '$ended • ${formatCallDuration(call.endedDurationSeconds)}';
   }
 }
 
-String _endedText(String? reason, CallMediaType mediaType) {
+String _endedText(
+  String? reason,
+  CallMediaType mediaType,
+  String? peerDisplayName,
+) {
   return switch (reason) {
     'declined' => 'Người nhận đã từ chối cuộc gọi',
     'busy' => 'Người nhận đang bận',
     'no-answer' => 'Không có người trả lời',
-    'unavailable' => 'Người nhận hiện không trực tuyến',
+    'unavailable' => loggedOutCallMessage(peerDisplayName),
     'canceled' => 'Cuộc gọi đã bị hủy',
     'disconnected' => 'Cuộc gọi bị ngắt kết nối',
     'connection-failed' =>
@@ -553,7 +561,7 @@ class _CallActions extends StatelessWidget {
                   icon: chatOpen
                       ? Icons.chat_bubble_rounded
                       : Icons.chat_bubble_outline_rounded,
-                  label: 'Nhắn tin',
+                  label: 'Chat & tệp',
                   color: chatOpen ? colors.primary : Colors.white24,
                   onPressed: onChatToggle,
                   darkSurface: true,
@@ -602,7 +610,7 @@ class _CallActions extends StatelessWidget {
                 icon: chatOpen
                     ? Icons.chat_bubble_rounded
                     : Icons.chat_bubble_outline_rounded,
-                label: 'Nhắn tin',
+                label: 'Chat & tệp',
                 color: chatOpen
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.surfaceContainerHighest,

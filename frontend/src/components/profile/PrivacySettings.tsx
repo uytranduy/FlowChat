@@ -8,12 +8,15 @@ import { Label } from "@/components/ui/label";
 import { userService } from "@/services/userService";
 import { blockService, type BlockedUser } from "@/services/blockService";
 import UserAvatar from "../chat/UserAvatar";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 function apiError(error: unknown, fallback: string) {
   return (error as { response?: { data?: { message?: string } } }).response?.data?.message || fallback;
 }
 
 const PrivacySettings = () => {
+  const user = useAuthStore((state) => state.user);
+  const isGoogleAccount = user?.authProvider === "google";
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [blocksOpen, setBlocksOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -74,8 +77,15 @@ const PrivacySettings = () => {
         <CardDescription>Quản lý mật khẩu, thông báo và người dùng đã chặn</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button variant="outline" className="w-full justify-start" onClick={() => setPasswordOpen((open) => !open)}><Shield className="mr-2 size-4" />Đổi mật khẩu</Button>
-        {passwordOpen && (
+        {isGoogleAccount ? (
+          <div className="rounded-xl border bg-muted/50 p-4 text-sm text-muted-foreground">
+            Tài khoản này đăng nhập bằng Google và không có mật khẩu FlowChat. Hãy quản lý hoặc khôi phục mật khẩu tại{" "}
+            <a className="font-medium text-primary underline" href="https://accounts.google.com/signin/recovery" target="_blank" rel="noreferrer">Tài khoản Google</a>.
+          </div>
+        ) : (
+          <Button variant="outline" className="w-full justify-start" onClick={() => setPasswordOpen((open) => !open)}><Shield className="mr-2 size-4" />Đổi mật khẩu</Button>
+        )}
+        {passwordOpen && !isGoogleAccount && (
           <div className="space-y-3 rounded-xl border p-4">
             <div><Label htmlFor="current-password">Mật khẩu hiện tại</Label><Input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
             <div><Label htmlFor="new-password">Mật khẩu mới</Label><Input id="new-password" type="password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></div>

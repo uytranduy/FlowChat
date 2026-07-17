@@ -10,12 +10,39 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useNavigate } from "react-router";
 import { GoogleSignInButton } from "./google-sign-in-button";
 
+const specialCharacterPattern = /[!@#$%^&*(),.?":{}|<>_\-+=]/;
+
+function passwordStrength(password: string) {
+  const score = [
+    password.length >= 6,
+    password.length >= 10,
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /\d/.test(password),
+    specialCharacterPattern.test(password),
+  ].filter(Boolean).length;
+
+  if (score >= 5 && specialCharacterPattern.test(password)) {
+    return { label: "Mạnh", width: "100%", color: "bg-emerald-500" };
+  }
+  if (score >= 3 && password.length >= 6 && specialCharacterPattern.test(password)) {
+    return { label: "Trung bình", width: "66%", color: "bg-amber-500" };
+  }
+  return { label: "Yếu", width: "33%", color: "bg-red-500" };
+}
+
 const signUpSchema = z.object({
   firstname: z.string().min(1, "Tên bắt buộc phải có"),
   lastname: z.string().min(1, "Họ bắt buộc phải có"),
   username: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
   email: z.email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+  password: z
+    .string()
+    .min(6, "Mật khẩu phải có ít nhất 6 ký tự")
+    .regex(
+      specialCharacterPattern,
+      "Mật khẩu phải có ít nhất một ký tự đặc biệt, ví dụ @ hoặc !"
+    ),
 });
 
 type SignUpFormValues = z.infer<typeof signUpSchema>;
@@ -25,19 +52,22 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
   const navigate = useNavigate();
   const {
     register,
+    watch,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<SignUpFormValues>({
     resolver: zodResolver(signUpSchema),
   });
+  const password = watch("password", "");
+  const strength = passwordStrength(password);
 
   const onSubmit = async (data: SignUpFormValues) => {
     const { firstname, lastname, username, email, password } = data;
 
     // gọi backend để signup
-    await signUp(username, password, email, firstname, lastname);
-
-    navigate("/signin");
+    if (await signUp(username, password, email, firstname, lastname)) {
+      navigate("/signin");
+    }
   };
 
   const onGoogleCredential = async (idToken: string) => {
@@ -147,6 +177,10 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                 {errors.email && (
                   <p className="error-message">{errors.email.message}</p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  FlowChat sẽ gửi liên kết xác minh tới email này. Bạn phải xác
+                  minh trước khi đăng nhập.
+                </p>
               </div>
 
               {/* password */}
@@ -164,6 +198,23 @@ export function SignupForm({ className, ...props }: React.ComponentProps<"div">)
                 />
                 {errors.password && (
                   <p className="error-message">{errors.password.message}</p>
+                )}
+                {password.length > 0 && (
+                  <div className="space-y-1.5" aria-live="polite">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Độ mạnh mật khẩu</span>
+                      <span className="font-semibold">{strength.label}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full transition-all ${strength.color}`}
+                        style={{ width: strength.width }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Tối thiểu 6 ký tự và có ít nhất một ký tự đặc biệt như @ hoặc !.
+                    </p>
+                  </div>
                 )}
               </div>
 

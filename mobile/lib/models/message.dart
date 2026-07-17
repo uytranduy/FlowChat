@@ -268,6 +268,8 @@ class Message {
     this.replyTo,
     this.reactions = const [],
     this.forwardedFrom,
+    this.pinnedAt,
+    this.pinnedBy = '',
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -294,6 +296,8 @@ class Message {
           .whereType<MessageReaction>()
           .toList(growable: false),
       forwardedFrom: ForwardedMessageMetadata.tryParse(json['forwardedFrom']),
+      pinnedAt: dateTimeOrNull(json['pinnedAt']),
+      pinnedBy: objectId(json['pinnedBy']),
       createdAt:
           dateTimeOrNull(json['createdAt']) ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
@@ -317,10 +321,13 @@ class Message {
   final ReplyMessageMetadata? replyTo;
   final List<MessageReaction> reactions;
   final ForwardedMessageMetadata? forwardedFrom;
+  final DateTime? pinnedAt;
+  final String pinnedBy;
 
   bool get isCall => messageType == MessageType.call && call != null;
   bool get isAttachment => attachment != null;
   bool get isForwarded => forwardedFrom != null;
+  bool get isPinned => pinnedAt != null;
 
   bool isOwn(String currentUserId) => senderId == currentUserId;
 

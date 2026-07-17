@@ -8,13 +8,14 @@ import StatusBadge from "./StatusBadge";
 import GroupChatAvatar from "./GroupChatAvatar";
 import { useSocketStore } from "@/stores/useSocketStore";
 import { Button } from "../ui/button";
-import { ChevronRight, Phone, PhoneCall, Video } from "lucide-react";
+import { ChevronRight, Phone, PhoneCall, Search, Video } from "lucide-react";
 import { useCallStore } from "@/stores/useCallStore";
 import { useEffect, useState } from "react";
 import ConversationInfoDialog from "./ConversationInfoDialog";
 import type { FriendRelationship } from "@/types/user";
 import { useGroupCallStore } from "@/stores/useGroupCallStore";
 import { presenceText } from "@/lib/presence";
+import MessageFinderDialog from "./MessageFinderDialog";
 
 const ChatWindowHeader = ({ chat, relationship, onRelationshipChanged }: { chat?: Conversation; relationship?: FriendRelationship | null; onRelationshipChanged?: () => void | Promise<void> }) => {
   const { conversations, activeConversationId } = useChatStore();
@@ -23,6 +24,7 @@ const ChatWindowHeader = ({ chat, relationship, onRelationshipChanged }: { chat?
   const callStatus = useCallStore((state) => state.status);
   const startCall = useCallStore((state) => state.startCall);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [presenceNow, setPresenceNow] = useState(() => Date.now());
   const groupCallStatus = useGroupCallStore((state) => state.status);
   const startGroupCall = useGroupCallStore((state) => state.start);
@@ -150,6 +152,7 @@ const ChatWindowHeader = ({ chat, relationship, onRelationshipChanged }: { chat?
 
           {chat.type === "direct" && otherUser && (
             <div className="ml-auto flex items-center gap-1">
+              <Button type="button" size="icon" variant="ghost" className="rounded-full" title="Tìm kiếm tin nhắn" aria-label="Tìm kiếm tin nhắn" onClick={() => setSearchOpen(true)}><Search /></Button>
               <Button
                 type="button"
                 size="icon"
@@ -206,6 +209,7 @@ const ChatWindowHeader = ({ chat, relationship, onRelationshipChanged }: { chat?
           )}
           {chat.type === "group" && !chat.group?.dissolvedAt && (
             <div className="ml-auto flex items-center gap-1">
+              <Button type="button" size="icon" variant="ghost" className="rounded-full" title="Tìm kiếm tin nhắn" aria-label="Tìm kiếm tin nhắn" onClick={() => setSearchOpen(true)}><Search /></Button>
               {activeGroupRoom?.conversationId === chat._id ? (
                 <Button type="button" variant="ghost" className="rounded-full text-emerald-600" disabled={!isConnected || callStatus !== "idle" || groupCallStatus !== "idle"} title="Tham gia lại cuộc gọi nhóm" onClick={() => void startGroupCall(chat!._id, chat!.group?.name || "Nhóm chat", activeGroupRoom.mediaType)}><PhoneCall /> Vào lại ({activeGroupRoom.participantCount})</Button>
               ) : (
@@ -216,6 +220,11 @@ const ChatWindowHeader = ({ chat, relationship, onRelationshipChanged }: { chat?
               )}
             </div>
           )}
+          {chat.type === "group" && chat.group?.dissolvedAt && (
+            <div className="ml-auto flex items-center gap-1">
+              <Button type="button" size="icon" variant="ghost" className="rounded-full" title="Tìm kiếm tin nhắn" aria-label="Tìm kiếm tin nhắn" onClick={() => setSearchOpen(true)}><Search /></Button>
+            </div>
+          )}
         </div>
       </div>
       <ConversationInfoDialog
@@ -223,6 +232,12 @@ const ChatWindowHeader = ({ chat, relationship, onRelationshipChanged }: { chat?
         open={infoOpen}
         onOpenChange={setInfoOpen}
         onRelationshipChanged={onRelationshipChanged}
+      />
+      <MessageFinderDialog
+        conversation={chat}
+        mode="search"
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
       />
     </header>
   );

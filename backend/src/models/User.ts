@@ -5,6 +5,12 @@ export interface IUser {
   hashedPassword?: string;
   googleId?: string;
   email: string;
+  emailVerificationRequired?: boolean;
+  emailVerifiedAt?: Date;
+  emailVerificationTokenHash?: string;
+  emailVerificationExpiresAt?: Date;
+  passwordResetTokenHash?: string;
+  passwordResetExpiresAt?: Date;
   displayName: string;
   avatarUrl?: string;
   avatarId?: string;
@@ -41,6 +47,31 @@ const userSchema = new Schema<IUser>(
       unique: true,
       lowercase: true,
       trim: true,
+    },
+    emailVerificationRequired: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerifiedAt: {
+      type: Date,
+    },
+    emailVerificationTokenHash: {
+      type: String,
+      select: false,
+      index: true,
+    },
+    emailVerificationExpiresAt: {
+      type: Date,
+      select: false,
+    },
+    passwordResetTokenHash: {
+      type: String,
+      select: false,
+      index: true,
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      select: false,
     },
     displayName: {
       type: String,

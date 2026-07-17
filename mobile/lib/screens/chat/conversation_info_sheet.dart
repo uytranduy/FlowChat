@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/conversation.dart';
+import '../../models/message.dart';
 import '../../models/user.dart';
 import 'chat_widgets.dart';
 import '../../state/app_controller.dart';
@@ -60,8 +64,11 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
       conversation.isGroup && conversation.group?.createdById == currentUserId;
   bool get _membersCanInvite =>
       conversation.group?.allowMembersToInvite ?? true;
+  bool get _membersCanRename =>
+      conversation.group?.allowMembersToRename ?? true;
   bool get _isDissolved => conversation.group?.isDissolved ?? false;
   bool get _canInvite => !_isDissolved && (_isOwner || _membersCanInvite);
+  bool get _canRename => !_isDissolved && (_isOwner || _membersCanRename);
 
   @override
   void initState() {
@@ -80,6 +87,17 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
     } catch (_) {
       // The member list remains usable if loading friends fails.
     }
+  }
+
+  Future<void> _openAttachments() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) =>
+          _ConversationAttachmentsSheet(conversationId: conversation.id),
+    );
   }
 
   Future<void> _addMember(User user) async {
@@ -175,6 +193,98 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
           ),
         ),
       );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pendingUserId = null);
+    }
+  }
+
+  Future<void> _changeRenamePermission(bool allowed) async {
+    if (_pendingUserId != null) return;
+    setState(() => _pendingUserId = 'rename-settings');
+    try {
+      final updated = await context
+          .read<AppController>()
+          .chatService
+          .updateGroupRenamePermission(conversation.id, allowed);
+      if (!mounted) return;
+      setState(() => conversation = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            allowed
+                ? 'Mọi thành viên có thể đổi tên nhóm.'
+                : 'Chỉ trưởng nhóm có thể đổi tên nhóm.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pendingUserId = null);
+    }
+  }
+
+  Future<void> _renameGroup() async {
+    var value = conversation.group?.name.trim() ?? '';
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Đổi tên nhóm'),
+        content: TextFormField(
+          initialValue: value,
+          autofocus: true,
+          maxLength: 50,
+          textInputAction: TextInputAction.done,
+          onChanged: (nextValue) => value = nextValue,
+          onFieldSubmitted: (_) {
+            final normalized = value.trim();
+            if (normalized.isNotEmpty) Navigator.pop(dialogContext, normalized);
+          },
+          decoration: const InputDecoration(hintText: 'Nhập tên nhóm mới'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final normalized = value.trim();
+              if (normalized.isNotEmpty) {
+                Navigator.pop(dialogContext, normalized);
+              }
+            },
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || name == null || name == conversation.group?.name) return;
+    setState(() => _pendingUserId = 'rename');
+    try {
+      final updated = await context
+          .read<AppController>()
+          .chatService
+          .renameGroup(conversation.id, name);
+      if (!mounted) return;
+      setState(() => conversation = updated);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã đổi tên nhóm.')));
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -358,6 +468,8 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
                 ? 'Người dùng chưa thêm lời giới thiệu.'
                 : bio,
           ),
+          const SizedBox(height: 10),
+          _AttachmentLibraryTile(onTap: _openAttachments),
           if (participant?.joinedAt case final joinedAt?) ...[
             const SizedBox(height: 10),
             _InfoCard(
@@ -421,6 +533,17 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                if (_canRename)
+                  TextButton.icon(
+                    onPressed: _pendingUserId == null ? _renameGroup : null,
+                    icon: _pendingUserId == 'rename'
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.edit_outlined),
+                    label: const Text('Đổi tên nhóm'),
+                  ),
                 const SizedBox(height: 3),
                 Text(
                   '${participants.length} thành viên',
@@ -463,17 +586,36 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
             ),
           ),
           const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+            child: _AttachmentLibraryTile(onTap: _openAttachments),
+          ),
           if (_isOwner && !_isDissolved)
-            SwitchListTile.adaptive(
-              value: _membersCanInvite,
-              onChanged: _pendingUserId == null
-                  ? (value) => _changeInvitePermission(value)
-                  : null,
-              title: const Text('Cho phép thành viên mời thêm người'),
-              subtitle: const Text(
-                'Khi tắt, chỉ trưởng nhóm có thể thêm thành viên.',
-              ),
-              secondary: const Icon(Icons.group_add_outlined),
+            Column(
+              children: [
+                SwitchListTile.adaptive(
+                  value: _membersCanInvite,
+                  onChanged: _pendingUserId == null
+                      ? (value) => _changeInvitePermission(value)
+                      : null,
+                  title: const Text('Cho phép thành viên mời thêm người'),
+                  subtitle: const Text(
+                    'Khi tắt, chỉ trưởng nhóm có thể thêm thành viên.',
+                  ),
+                  secondary: const Icon(Icons.group_add_outlined),
+                ),
+                SwitchListTile.adaptive(
+                  value: _membersCanRename,
+                  onChanged: _pendingUserId == null
+                      ? (value) => _changeRenamePermission(value)
+                      : null,
+                  title: const Text('Cho phép thành viên đổi tên nhóm'),
+                  subtitle: const Text(
+                    'Khi tắt, chỉ trưởng nhóm có thể đổi tên nhóm.',
+                  ),
+                  secondary: const Icon(Icons.edit_outlined),
+                ),
+              ],
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -689,6 +831,304 @@ class _ConversationInfoSheetState extends State<_ConversationInfoSheet> {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentLibraryTile extends StatelessWidget {
+  const _AttachmentLibraryTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerHighest.withValues(alpha: .55),
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(Icons.photo_library_outlined, color: colors.primary),
+        title: const Text(
+          'Ảnh, video và tệp đã gửi',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: const Text('Xem nội dung đã chia sẻ trong cuộc trò chuyện'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+      ),
+    );
+  }
+}
+
+class _ConversationAttachmentsSheet extends StatefulWidget {
+  const _ConversationAttachmentsSheet({required this.conversationId});
+
+  final String conversationId;
+
+  @override
+  State<_ConversationAttachmentsSheet> createState() =>
+      _ConversationAttachmentsSheetState();
+}
+
+class _ConversationAttachmentsSheetState
+    extends State<_ConversationAttachmentsSheet> {
+  List<Message> _messages = const [];
+  MessageAttachmentKind? _filter;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final messages = await context
+          .read<AppController>()
+          .chatService
+          .getConversationAttachments(widget.conversationId);
+      if (!mounted) return;
+      setState(() {
+        _messages = messages;
+        _loading = false;
+        _error = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Không thể tải ảnh và tệp đã gửi.';
+      });
+    }
+  }
+
+  Future<void> _openImage(MessageAttachment attachment) async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  minScale: .5,
+                  maxScale: 4,
+                  boundaryMargin: const EdgeInsets.all(80),
+                  child: Center(
+                    child: Image.network(
+                      attachment.url,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, _, _) => const Center(
+                        child: Text(
+                          'Không thể tải ảnh.',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton.filled(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: 'Đóng',
+                ),
+              ),
+              const Positioned(
+                left: 12,
+                right: 12,
+                bottom: 16,
+                child: Text(
+                  'Dùng hai ngón tay để phóng to hoặc thu nhỏ',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFile(MessageAttachment attachment) async {
+    final uri = Uri.tryParse(attachment.url);
+    if (uri == null || !uri.hasScheme) return;
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Không thể mở tệp này.')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _messages
+        .where((message) {
+          final attachment = message.attachment;
+          return attachment != null &&
+              (_filter == null || attachment.kind == _filter);
+        })
+        .toList(growable: false);
+
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * .86,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Row(
+              children: [
+                const Icon(Icons.photo_library_outlined),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Ảnh, video và tệp đã gửi',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('Tất cả'),
+                  selected: _filter == null,
+                  onSelected: (_) => setState(() => _filter = null),
+                ),
+                const SizedBox(width: 7),
+                ChoiceChip(
+                  label: const Text('Ảnh'),
+                  selected: _filter == MessageAttachmentKind.image,
+                  onSelected: (_) =>
+                      setState(() => _filter = MessageAttachmentKind.image),
+                ),
+                const SizedBox(width: 7),
+                ChoiceChip(
+                  label: const Text('Video'),
+                  selected: _filter == MessageAttachmentKind.video,
+                  onSelected: (_) =>
+                      setState(() => _filter = MessageAttachmentKind.video),
+                ),
+                const SizedBox(width: 7),
+                ChoiceChip(
+                  label: const Text('Tệp'),
+                  selected: _filter == MessageAttachmentKind.file,
+                  onSelected: (_) =>
+                      setState(() => _filter = MessageAttachmentKind.file),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(child: Text(_error!))
+                : filtered.isEmpty
+                ? const Center(child: Text('Chưa có nội dung phù hợp.'))
+                : GridView.builder(
+                    padding: const EdgeInsets.all(12),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: .92,
+                        ),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final message = filtered[index];
+                      final attachment = message.attachment!;
+                      final isImage = attachment.isImage;
+                      return Material(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(14),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: isImage
+                              ? () => unawaited(_openImage(attachment))
+                              : () => unawaited(_openFile(attachment)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: isImage
+                                    ? Image.network(
+                                        attachment.url,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => const Icon(
+                                          Icons.broken_image_outlined,
+                                          size: 42,
+                                        ),
+                                      )
+                                    : Icon(
+                                        attachment.isVideo
+                                            ? Icons.play_circle_outline_rounded
+                                            : Icons.insert_drive_file_outlined,
+                                        size: 48,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(9),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      attachment.fileName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Text(
+                                      DateFormat(
+                                        'dd/MM/yyyy HH:mm',
+                                      ).format(message.createdAt.toLocal()),
+                                      maxLines: 1,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelSmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

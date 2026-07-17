@@ -12,6 +12,7 @@ import type { FriendRelationship } from "@/types/user";
 import MessageRequestBanner from "./MessageRequestBanner";
 import { useSocketStore } from "@/stores/useSocketStore";
 import { AlertTriangle } from "lucide-react";
+import PinnedMessageBanner from "./PinnedMessageBanner";
 
 const ChatWindowLayout = () => {
   const {
@@ -69,6 +70,8 @@ const ChatWindowLayout = () => {
     <SidebarInset className="flex flex-col h-full flex-1 overflow-hidden rounded-sm shadow-md">
       {/* Header */}
       <ChatWindowHeader chat={selectedConvo} relationship={relationship} onRelationshipChanged={refreshRelationship} />
+
+      <PinnedMessageBanner conversation={selectedConvo} />
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto bg-primary-foreground">

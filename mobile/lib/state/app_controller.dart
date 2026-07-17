@@ -37,6 +37,7 @@ class AppController extends ChangeNotifier {
   bool authBusy = false;
   bool isDark = false;
   String? authError;
+  String? authNotice;
   String? profileError;
 
   Future<void> initialize() async {
@@ -70,6 +71,7 @@ class AppController extends ChangeNotifier {
     if (authBusy) return false;
     authBusy = true;
     authError = null;
+    authNotice = null;
     notifyListeners();
 
     try {
@@ -96,6 +98,7 @@ class AppController extends ChangeNotifier {
     if (authBusy) return false;
     authBusy = true;
     authError = null;
+    authNotice = null;
     notifyListeners();
 
     try {
@@ -128,10 +131,11 @@ class AppController extends ChangeNotifier {
     if (authBusy) return false;
     authBusy = true;
     authError = null;
+    authNotice = null;
     notifyListeners();
 
     try {
-      await authService.signUp(
+      authNotice = await authService.signUp(
         username: username,
         password: password,
         email: email,
@@ -145,6 +149,48 @@ class AppController extends ChangeNotifier {
         fallback: 'Đăng ký không thành công. Vui lòng thử lại.',
       );
       return false;
+    } finally {
+      authBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> requestPasswordReset(String email) async {
+    if (authBusy) return null;
+    authBusy = true;
+    authError = null;
+    authNotice = null;
+    notifyListeners();
+    try {
+      authNotice = await authService.requestPasswordReset(email);
+      return authNotice;
+    } catch (error) {
+      authError = _messageFor(
+        error,
+        fallback: 'Không thể gửi email đặt lại mật khẩu.',
+      );
+      return null;
+    } finally {
+      authBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> resendVerification(String email) async {
+    if (authBusy) return null;
+    authBusy = true;
+    authError = null;
+    authNotice = null;
+    notifyListeners();
+    try {
+      authNotice = await authService.resendVerification(email);
+      return authNotice;
+    } catch (error) {
+      authError = _messageFor(
+        error,
+        fallback: 'Không thể gửi lại email xác minh.',
+      );
+      return null;
     } finally {
       authBusy = false;
       notifyListeners();
@@ -267,8 +313,9 @@ class AppController extends ChangeNotifier {
   }
 
   void clearAuthError() {
-    if (authError == null) return;
+    if (authError == null && authNotice == null) return;
     authError = null;
+    authNotice = null;
     notifyListeners();
   }
 

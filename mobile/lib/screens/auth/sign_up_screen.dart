@@ -7,6 +7,8 @@ import '../../widgets/auth_scaffold.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/google_auth_button.dart';
 
+enum _PasswordStrength { weak, medium, strong }
+
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -18,6 +20,9 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  static final _specialCharacterPattern = RegExp(
+    r'[!@#$%^&*(),.?":{}|<>_\-+=]',
+  );
 
   final _formKey = GlobalKey<FormState>();
   final _lastNameController = TextEditingController();
@@ -26,6 +31,44 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
+  _PasswordStrength _passwordStrength(String password) {
+    final score = <bool>[
+      password.length >= 6,
+      password.length >= 10,
+      RegExp('[a-z]').hasMatch(password),
+      RegExp('[A-Z]').hasMatch(password),
+      RegExp(r'\d').hasMatch(password),
+      _specialCharacterPattern.hasMatch(password),
+    ].where((matched) => matched).length;
+    if (score >= 5 && _specialCharacterPattern.hasMatch(password)) {
+      return _PasswordStrength.strong;
+    }
+    if (score >= 3 &&
+        password.length >= 6 &&
+        _specialCharacterPattern.hasMatch(password)) {
+      return _PasswordStrength.medium;
+    }
+    return _PasswordStrength.weak;
+  }
+
+  String _strengthLabel(_PasswordStrength strength) => switch (strength) {
+    _PasswordStrength.weak => 'Yếu',
+    _PasswordStrength.medium => 'Trung bình',
+    _PasswordStrength.strong => 'Mạnh',
+  };
+
+  Color _strengthColor(_PasswordStrength strength) => switch (strength) {
+    _PasswordStrength.weak => Colors.red,
+    _PasswordStrength.medium => Colors.orange,
+    _PasswordStrength.strong => Colors.green,
+  };
+
+  double _strengthValue(_PasswordStrength strength) => switch (strength) {
+    _PasswordStrength.weak => 1 / 3,
+    _PasswordStrength.medium => 2 / 3,
+    _PasswordStrength.strong => 1,
+  };
 
   @override
   void dispose() {
@@ -73,8 +116,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Đăng ký thành công! Bạn có thể đăng nhập ngay.'),
+        SnackBar(
+          content: Text(
+            controller.authNotice ??
+                'Đăng ký thành công! Hãy mở email và xác minh tài khoản trước khi đăng nhập.',
+          ),
         ),
       );
       Navigator.of(context).pushReplacementNamed('/signin');
@@ -105,6 +151,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     final controller = context.watch<AppController>();
     final busy = controller.authBusy;
+    final password = _passwordController.text;
+    final strength = _passwordStrength(password);
 
     return AuthScaffold(
       title: 'Tạo tài khoản FlowChat',
@@ -204,6 +252,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 },
                 onChanged: (_) => _clearError(),
               ),
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'FlowChat sẽ gửi liên kết xác minh tới email này. Bạn phải xác minh trước khi đăng nhập.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _passwordController,
@@ -237,11 +292,55 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   if (value.length < 6) {
                     return 'Mật khẩu phải có ít nhất 6 ký tự';
                   }
+                  if (!_specialCharacterPattern.hasMatch(value)) {
+                    return 'Mật khẩu phải có ký tự đặc biệt, ví dụ @ hoặc !';
+                  }
                   return null;
                 },
-                onChanged: (_) => _clearError(),
+                onChanged: (_) {
+                  _clearError();
+                  setState(() {});
+                },
                 onFieldSubmitted: (_) => _submit(),
               ),
+              if (password.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text(
+                      'Độ mạnh mật khẩu:',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      _strengthLabel(strength),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: _strengthColor(strength),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: _strengthValue(strength),
+                    minHeight: 8,
+                    color: _strengthColor(strength),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Tối thiểu 6 ký tự và có ít nhất một ký tự đặc biệt như @ hoặc !.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               FlowChatGradientButton(
                 label: 'Tạo tài khoản',

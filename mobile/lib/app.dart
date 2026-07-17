@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'screens/auth/sign_in_screen.dart';
 import 'screens/auth/sign_up_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'state/app_controller.dart';
 import 'state/call_controller.dart';
@@ -45,6 +46,8 @@ class FlowChatApp extends StatelessWidget {
               '/': (_) => const _AuthGate(),
               SignInScreen.routeName: (_) => const SignInScreen(),
               SignUpScreen.routeName: (_) => const SignUpScreen(),
+              ForgotPasswordScreen.routeName: (_) =>
+                  const ForgotPasswordScreen(),
             },
           );
         },

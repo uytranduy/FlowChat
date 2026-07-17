@@ -6,6 +6,7 @@ import '../../widgets/auth_form_helpers.dart';
 import '../../widgets/auth_scaffold.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/google_auth_button.dart';
+import 'forgot_password_screen.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -165,7 +166,21 @@ class _SignInScreenState extends State<SignInScreen> {
                 onChanged: (_) => _clearError(),
                 onFieldSubmitted: (_) => _submit(),
               ),
-              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: busy
+                      ? null
+                      : () {
+                          controller.clearAuthError();
+                          Navigator.of(
+                            context,
+                          ).pushNamed(ForgotPasswordScreen.routeName);
+                        },
+                  child: const Text('Quên mật khẩu?'),
+                ),
+              ),
+              const SizedBox(height: 8),
               FlowChatGradientButton(
                 label: 'Đăng nhập',
                 icon: Icons.login_rounded,

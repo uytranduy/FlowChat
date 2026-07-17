@@ -20,15 +20,22 @@ export async function presentMessagesWithReactionUsers(
     : [];
   const usersById = new Map(users.map((user) => [user._id.toString(), user]));
 
-  return messages.map((message) => ({
-    ...message.toObject(),
-    reactions: message.reactions.map((reaction) => ({
-      userId: reaction.userId,
-      emoji: reaction.emoji,
-      createdAt: reaction.createdAt,
-      user: usersById.get(reaction.userId.toString()) ?? null,
-    })),
-  }));
+  return messages.map((message) => {
+    const presented = message.toObject();
+    return {
+      ...presented,
+      // Always include nullable pin fields. Clients merge realtime message
+      // updates, so omitting these keys would preserve a stale pinned state.
+      pinnedAt: presented.pinnedAt ?? null,
+      pinnedBy: presented.pinnedBy ?? null,
+      reactions: message.reactions.map((reaction) => ({
+        userId: reaction.userId,
+        emoji: reaction.emoji,
+        createdAt: reaction.createdAt,
+        user: usersById.get(reaction.userId.toString()) ?? null,
+      })),
+    };
+  });
 }
 
 export async function presentMessageWithReactionUsers(

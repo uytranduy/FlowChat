@@ -30,8 +30,7 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
 
   const onSubmit = async (data: SignInFormValues) => {
     const { username, password } = data;
-    await signIn(username, password);
-    navigate("/");
+    if (await signIn(username, password)) navigate("/");
   };
 
   const onGoogleCredential = async (idToken: string) => {
@@ -107,6 +106,15 @@ export function SigninForm({ className, ...props }: React.ComponentProps<"div">)
                     {errors.password.message}
                   </p>
                 )}
+              </div>
+
+              <div className="-mt-3 text-right text-sm">
+                <a
+                  href="/forgot-password"
+                  className="text-primary underline underline-offset-4"
+                >
+                  Quên mật khẩu?
+                </a>
               </div>
 
               {/* nút đăng nhập */}

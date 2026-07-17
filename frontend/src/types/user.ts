@@ -2,6 +2,7 @@ export interface User {
   _id: string;
   username: string;
   email: string;
+  authProvider?: "local" | "google";
   displayName: string;
   avatarUrl?: string;
   bio?: string;

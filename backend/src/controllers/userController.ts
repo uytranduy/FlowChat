@@ -7,6 +7,28 @@ import { broadcastOnlineUsers, io, isUserOnline } from "../socket/index.js";
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 const PROFILE_FIELDS = "_id username email displayName avatarUrl bio phone showOnlineStatus notificationsEnabled lastSeenAt createdAt updatedAt";
+const PRIVATE_PROFILE_FIELDS = `${PROFILE_FIELDS} googleId hashedPassword`;
+
+function privateUserPayload(user: InstanceType<typeof User>) {
+  const raw = user.toObject();
+  const {
+    googleId,
+    hashedPassword,
+    emailVerificationTokenHash: _emailVerificationTokenHash,
+    emailVerificationExpiresAt: _emailVerificationExpiresAt,
+    passwordResetTokenHash: _passwordResetTokenHash,
+    passwordResetExpiresAt: _passwordResetExpiresAt,
+    ...safeUser
+  } = raw;
+  void _emailVerificationTokenHash;
+  void _emailVerificationExpiresAt;
+  void _passwordResetTokenHash;
+  void _passwordResetExpiresAt;
+  return {
+    ...safeUser,
+    authProvider: googleId && !hashedPassword ? "google" : "local",
+  };
+}
 
 function cleanText(value: unknown, maximum: number): string | null {
   if (typeof value !== "string") return null;
@@ -15,10 +37,14 @@ function cleanText(value: unknown, maximum: number): string | null {
 
 export const authMe = async (req: Request, res: Response): Promise<any> => {
   try {
-    const user = req.user; // lấy từ authMiddleware
+    if (!req.user) {
+      return res.status(401).json({ message: "Không tìm thấy thông tin người dùng" });
+    }
+    const user = await User.findById(req.user._id).select(PRIVATE_PROFILE_FIELDS);
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
     return res.status(200).json({
-      user,
+      user: privateUserPayload(user),
     });
   } catch (error) {
     console.error("Lỗi khi gọi authMe", error);
@@ -102,9 +128,11 @@ export const updateProfile = async (req: Request, res: Response): Promise<any> =
       req.user._id,
       { $set: { displayName, username, email, phone, bio } },
       { new: true, runValidators: true }
-    ).select(PROFILE_FIELDS);
-    io.to(req.user._id.toString()).emit("user-profile:updated", { user });
-    return res.status(200).json({ message: "Đã cập nhật hồ sơ", user });
+    ).select(PRIVATE_PROFILE_FIELDS);
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
+    const payload = privateUserPayload(user);
+    io.to(req.user._id.toString()).emit("user-profile:updated", { user: payload });
+    return res.status(200).json({ message: "Đã cập nhật hồ sơ", user: payload });
   } catch (error) {
     console.error("Lỗi khi cập nhật hồ sơ", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
@@ -123,9 +151,10 @@ export const updatePreferences = async (req: Request, res: Response): Promise<an
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ message: "Không có cấu hình hợp lệ để cập nhật" });
     }
-    const user = await User.findByIdAndUpdate(req.user._id, { $set: updates }, { new: true }).select(PROFILE_FIELDS);
+    const user = await User.findByIdAndUpdate(req.user._id, { $set: updates }, { new: true }).select(PRIVATE_PROFILE_FIELDS);
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
     await broadcastOnlineUsers();
-    return res.status(200).json({ message: "Đã cập nhật cấu hình", user });
+    return res.status(200).json({ message: "Đã cập nhật cấu hình", user: privateUserPayload(user) });
   } catch (error) {
     console.error("Lỗi khi cập nhật cấu hình", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
@@ -138,8 +167,15 @@ export const changePassword = async (req: Request, res: Response): Promise<any> 
     const currentPassword = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
     const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
     if (newPassword.length < 8) return res.status(400).json({ message: "Mật khẩu mới phải có ít nhất 8 ký tự" });
-    const user = await User.findById(req.user._id).select("+hashedPassword");
+    const user = await User.findById(req.user._id).select("+hashedPassword googleId");
     if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
+    if (user.googleId && !user.hashedPassword) {
+      return res.status(400).json({
+        code: "GOOGLE_ACCOUNT",
+        message:
+          "Tài khoản này đăng nhập bằng Google và không sử dụng mật khẩu FlowChat. Vui lòng đổi mật khẩu tại Google.",
+      });
+    }
     if (user.hashedPassword) {
       const correct = await bcrypt.compare(currentPassword, user.hashedPassword);
       if (!correct) return res.status(400).json({ message: "Mật khẩu hiện tại không đúng" });

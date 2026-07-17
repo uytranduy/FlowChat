@@ -30,6 +30,37 @@ export const chatService = {
     return { messages: res.data.messages, cursor: res.data.nextCursor };
   },
 
+  async searchMessages(conversationId: string, query: string): Promise<Message[]> {
+    const res = await api.get(`/conversations/${conversationId}/messages/search`, {
+      params: { q: query, limit: 50 },
+    });
+    return res.data.messages;
+  },
+
+  async fetchPinnedMessages(conversationId: string): Promise<Message[]> {
+    const res = await api.get(`/conversations/${conversationId}/pinned-messages`);
+    return res.data.messages;
+  },
+
+  async fetchConversationAttachments(
+    conversationId: string
+  ): Promise<Message[]> {
+    const res = await api.get(`/conversations/${conversationId}/attachments`);
+    return res.data.messages;
+  },
+
+  async updateMessagePin(
+    conversationId: string,
+    messageId: string,
+    pinned: boolean
+  ): Promise<Message> {
+    const res = await api.patch(
+      `/conversations/${conversationId}/messages/${messageId}/pin`,
+      { pinned }
+    );
+    return res.data.message;
+  },
+
   async sendDirectMessage(
     recipientId: string,
     content: string = "",
@@ -134,6 +165,22 @@ export const chatService = {
       `/conversations/${conversationId}/group-settings`,
       { allowMembersToInvite }
     );
+    return res.data.conversation;
+  },
+  async updateGroupRenamePermission(
+    conversationId: string,
+    allowMembersToRename: boolean
+  ) {
+    const res = await api.patch(
+      `/conversations/${conversationId}/group-settings`,
+      { allowMembersToRename }
+    );
+    return res.data.conversation;
+  },
+  async renameGroup(conversationId: string, name: string) {
+    const res = await api.patch(`/conversations/${conversationId}/group-name`, {
+      name,
+    });
     return res.data.conversation;
   },
   async leaveGroup(conversationId: string): Promise<void> {

@@ -60,6 +60,8 @@ class CallController extends ChangeNotifier {
   Set<String> _onlineUserIds = const {};
   final Map<String, DateTime> _recentlyOfflineAt = {};
   int _conversationRevision = 0;
+  int _messagePinRevision = 0;
+  String? _messagePinConversationId;
 
   bool get isBusy => status != VoiceCallStatus.idle;
   bool get canStartCall => status == VoiceCallStatus.idle && socketConnected;
@@ -74,6 +76,8 @@ class CallController extends ChangeNotifier {
   bool isUserOnline(String userId) => _onlineUserIds.contains(userId);
   DateTime? recentlyOfflineAt(String userId) => _recentlyOfflineAt[userId];
   int get conversationRevision => _conversationRevision;
+  int get messagePinRevision => _messagePinRevision;
+  String? get messagePinConversationId => _messagePinConversationId;
 
   Future<void> connect(User user) async {
     final token = await _tokenStorage.readAccessToken();
@@ -129,6 +133,7 @@ class CallController extends ChangeNotifier {
     socket.on('online-users', _handleOnlineUsers);
     socket.on('new-group', _handleConversationUpdated);
     socket.on('conversation:updated', _handleConversationUpdated);
+    socket.on('message-pin:updated', _handleMessagePinUpdated);
     socket.connect();
   }
 
@@ -214,7 +219,14 @@ class CallController extends ChangeNotifier {
       return true;
     } catch (error) {
       if (version != _sessionVersion) return false;
-      await _fail(error, fallback: 'Không thể bắt đầu cuộc gọi.');
+      final normalizedError =
+          error is CallException && error.code == 'CALLEE_OFFLINE'
+          ? CallException(
+              loggedOutCallMessage(callee.displayName),
+              code: error.code,
+            )
+          : error;
+      await _fail(normalizedError, fallback: 'Không thể bắt đầu cuộc gọi.');
       return false;
     }
   }
@@ -256,6 +268,15 @@ class CallController extends ChangeNotifier {
 
   void _handleConversationUpdated(Object? _) {
     _conversationRevision += 1;
+    _notify();
+  }
+
+  void _handleMessagePinUpdated(Object? data) {
+    final payload = _map(data);
+    final targetConversationId = _string(payload['conversationId']);
+    if (targetConversationId == null || targetConversationId.isEmpty) return;
+    _messagePinConversationId = targetConversationId;
+    _messagePinRevision += 1;
     _notify();
   }
 

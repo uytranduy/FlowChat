@@ -10,6 +10,9 @@ import { useAuthStore } from "./stores/useAuthStore";
 import { useSocketStore } from "./stores/useSocketStore";
 import CallManager from "./components/call/CallManager";
 import GroupCallManager from "./components/call/GroupCallManager";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 
 function App() {
   const { isDark, setTheme } = useThemeStore();
@@ -44,6 +47,9 @@ function App() {
             path="/signup"
             element={<SignUpPage />}
           />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
           {/* protectect routes */}
           <Route element={<ProtectedRoute />}>

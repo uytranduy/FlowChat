@@ -177,6 +177,8 @@ bool hasMessagePresentationChanged(Message previous, Message current) {
       previous.recalledAt != current.recalledAt ||
       previous.messageType != current.messageType ||
       previous.forwardedFrom?.messageId != current.forwardedFrom?.messageId ||
+      previous.pinnedAt != current.pinnedAt ||
+      previous.pinnedBy != current.pinnedBy ||
       previous.replyTo?.messageId != current.replyTo?.messageId ||
       previous.replyTo?.senderId != current.replyTo?.senderId ||
       previous.replyTo?.content != current.replyTo?.content ||

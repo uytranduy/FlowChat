@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarDays, Crown, Loader2, LogOut, Search, Trash2, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, Crown, Images, Loader2, LogOut, Pencil, Search, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useSocketStore } from "@/stores/useSocketStore";
 import type { Conversation, Participant } from "@/types/chat";
@@ -23,6 +23,7 @@ import { chatService } from "@/services/chatService";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
 import { Switch } from "../ui/switch";
+import ConversationAttachmentsDialog from "./ConversationAttachmentsDialog";
 
 interface ConversationInfoDialogProps {
   conversation: Conversation;
@@ -97,6 +98,9 @@ const ConversationInfoDialog = ({
   const [presenceNow, setPresenceNow] = useState(() => Date.now());
   const isGroup = conversation.type === "group";
   const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [groupName, setGroupName] = useState(conversation.group?.name || "");
   const [groupPending, setGroupPending] = useState<string | null>(null);
   const friends = useFriendStore((state) => state.friends);
   const getFriends = useFriendStore((state) => state.getFriends);
@@ -111,7 +115,9 @@ const ConversationInfoDialog = ({
   const currentUserIsOwner = isGroup && conversation.group?.createdBy?.toString() === user?._id;
   const isDissolved = Boolean(conversation.group?.dissolvedAt);
   const membersCanInvite = conversation.group?.allowMembersToInvite !== false;
+  const membersCanRename = conversation.group?.allowMembersToRename !== false;
   const currentUserCanInvite = !isDissolved && (currentUserIsOwner || membersCanInvite);
+  const currentUserCanRename = !isDissolved && (currentUserIsOwner || membersCanRename);
   const participantIds = useMemo(
     () => new Set(conversation.participants.map((participant) => participant._id)),
     [conversation.participants]
@@ -170,6 +176,48 @@ const ConversationInfoDialog = ({
       setGroupPending(null);
     }
   };
+
+  const changeRenamePermission = async (allowMembersToRename: boolean) => {
+    if (groupPending) return;
+    setGroupPending("rename-settings");
+    try {
+      const updated = await chatService.updateGroupRenamePermission(
+        conversation._id,
+        allowMembersToRename
+      );
+      updateConversation(updated);
+      toast.success(
+        allowMembersToRename
+          ? "Mọi thành viên có thể đổi tên nhóm."
+          : "Chỉ trưởng nhóm có thể đổi tên nhóm."
+      );
+    } catch (error) {
+      toast.error((error as { response?: { data?: { message?: string } } }).response?.data?.message || "Không thể cập nhật quyền đổi tên.");
+    } finally {
+      setGroupPending(null);
+    }
+  };
+
+  const renameGroup = async () => {
+    const name = groupName.trim();
+    if (!name || name.length > 50 || groupPending) return;
+    setGroupPending("rename");
+    try {
+      const updated = await chatService.renameGroup(conversation._id, name);
+      updateConversation(updated);
+      setRenaming(false);
+      toast.success("Đã đổi tên nhóm.");
+    } catch (error) {
+      toast.error((error as { response?: { data?: { message?: string } } }).response?.data?.message || "Không thể đổi tên nhóm.");
+    } finally {
+      setGroupPending(null);
+    }
+  };
+
+  useEffect(() => {
+    setGroupName(conversation.group?.name || "");
+    if (!open) setRenaming(false);
+  }, [conversation.group?.name, open]);
 
   const leaveGroup = async () => {
     if (groupPending || !window.confirm(`Bạn có chắc muốn rời ${conversation.group?.name || "nhóm này"}?`)) return;
@@ -288,6 +336,30 @@ const ConversationInfoDialog = ({
               <h3 className="mt-3 text-xl font-bold text-foreground">
                 {conversation.group?.name || "Nhóm chat"}
               </h3>
+              {currentUserCanRename && (
+                renaming ? (
+                  <div className="mt-3 flex w-full items-center gap-2">
+                    <Input
+                      autoFocus
+                      value={groupName}
+                      maxLength={50}
+                      onChange={(event) => setGroupName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void renameGroup();
+                      }}
+                      placeholder="Tên nhóm mới"
+                    />
+                    <Button type="button" size="icon" disabled={!groupName.trim() || groupPending === "rename"} onClick={() => void renameGroup()}>
+                      {groupPending === "rename" ? <Loader2 className="animate-spin" /> : <Check />}
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" disabled={groupPending === "rename"} onClick={() => { setGroupName(conversation.group?.name || ""); setRenaming(false); }}><X /></Button>
+                  </div>
+                ) : (
+                  <Button type="button" size="sm" variant="ghost" className="mt-1" onClick={() => setRenaming(true)}>
+                    <Pencil /> Đổi tên nhóm
+                  </Button>
+                )
+              )}
               <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Users className="size-4" />
                 {conversation.participants.length} thành viên
@@ -303,19 +375,42 @@ const ConversationInfoDialog = ({
               )}
             </div>
 
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => setAttachmentsOpen(true)}
+            >
+              <Images /> Ảnh, video và tệp đã gửi
+            </Button>
+
             <div className="space-y-3">
               {currentUserIsOwner && !isDissolved && (
-                <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
-                  <div>
-                    <p className="text-sm font-medium">Cho phép thành viên mời thêm người</p>
-                    <p className="text-xs text-muted-foreground">Khi tắt, chỉ trưởng nhóm có thể thêm thành viên.</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
+                    <div>
+                      <p className="text-sm font-medium">Cho phép thành viên mời thêm người</p>
+                      <p className="text-xs text-muted-foreground">Khi tắt, chỉ trưởng nhóm có thể thêm thành viên.</p>
+                    </div>
+                    <Switch
+                      checked={membersCanInvite}
+                      disabled={Boolean(groupPending)}
+                      onCheckedChange={(checked) => void changeInvitePermission(checked)}
+                      aria-label="Cho phép mọi thành viên mời thêm người"
+                    />
                   </div>
-                  <Switch
-                    checked={membersCanInvite}
-                    disabled={Boolean(groupPending)}
-                    onCheckedChange={(checked) => void changeInvitePermission(checked)}
-                    aria-label="Cho phép mọi thành viên mời thêm người"
-                  />
+                  <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3">
+                    <div>
+                      <p className="text-sm font-medium">Cho phép thành viên đổi tên nhóm</p>
+                      <p className="text-xs text-muted-foreground">Khi tắt, chỉ trưởng nhóm có thể đổi tên nhóm.</p>
+                    </div>
+                    <Switch
+                      checked={membersCanRename}
+                      disabled={Boolean(groupPending)}
+                      onCheckedChange={(checked) => void changeRenamePermission(checked)}
+                      aria-label="Cho phép mọi thành viên đổi tên nhóm"
+                    />
+                  </div>
                 </div>
               )}
               <div className="flex items-center justify-between">
@@ -450,6 +545,14 @@ const ConversationInfoDialog = ({
               now={presenceNow}
               lastSeenAt={lastSeenByUser[displayedOtherUser._id]}
             />
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => setAttachmentsOpen(true)}
+            >
+              <Images /> Ảnh, video và tệp đã gửi
+            </Button>
             <div className="rounded-xl border bg-muted/30 px-4 py-3">
               <p className="text-xs text-muted-foreground">
                 Bắt đầu trò chuyện từ
@@ -478,6 +581,11 @@ const ConversationInfoDialog = ({
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setSelectedParticipant(null);
         }}
+      />
+      <ConversationAttachmentsDialog
+        conversationId={conversation._id}
+        open={attachmentsOpen}
+        onOpenChange={setAttachmentsOpen}
       />
     </Dialog>
   );

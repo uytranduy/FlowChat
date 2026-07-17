@@ -358,7 +358,12 @@ function errorMessage(error: unknown): string {
   return "Đã xảy ra lỗi khi thiết lập cuộc gọi.";
 }
 
-function endedMessage(reason: string): string | null {
+function loggedOutCallMessage(displayName?: string): string {
+  const name = displayName?.trim() || "này";
+  return `Người dùng ${name} hiện đã đăng xuất khỏi tài khoản nên không thể nhận cuộc gọi.`;
+}
+
+function endedMessage(reason: string, peer?: CallPeer | null): string | null {
   switch (reason) {
     case "declined":
       return "Người dùng đã từ chối cuộc gọi.";
@@ -376,6 +381,8 @@ function endedMessage(reason: string): string | null {
       return "Không thể duy trì kết nối cuộc gọi.";
     case "busy":
       return "Người nhận đang bận.";
+    case "unavailable":
+      return loggedOutCallMessage(peer?.displayName);
     case "ended":
       return "Cuộc gọi đã kết thúc.";
     default:
@@ -696,7 +703,10 @@ export const useCallStore = create<CallState>((set, get) => ({
       set({ callId, operationPending: false });
     } catch (error) {
       if (version !== sessionVersion) return;
-      const message = errorMessage(error);
+      const message =
+        error instanceof CallOperationError && error.code === "CALLEE_OFFLINE"
+          ? loggedOutCallMessage(peer.displayName)
+          : errorMessage(error);
       resetCall(message);
       toast.error(message);
     }
@@ -855,7 +865,7 @@ export const useCallStore = create<CallState>((set, get) => ({
     }
 
     if (get().callId !== payload.callId) return;
-    const message = endedMessage(payload.reason);
+    const message = endedMessage(payload.reason, get().peer);
     resetCall();
     if (message) toast.info(message);
   },

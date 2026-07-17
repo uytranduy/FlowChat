@@ -22,6 +22,7 @@ export interface Group {
   name: string;
   createdBy: string;
   allowMembersToInvite?: boolean;
+  allowMembersToRename?: boolean;
   dissolvedAt?: string | null;
   dissolvedBy?: string | null;
 }
@@ -125,6 +126,8 @@ export interface Message {
   replyTo?: MessageReplyReference | null;
   reactions?: MessageReaction[];
   forwardedFrom?: ForwardedMessageReference | null;
+  pinnedAt?: string | null;
+  pinnedBy?: string | null;
   updatedAt?: string | null;
   createdAt: string;
   isOwn?: boolean;

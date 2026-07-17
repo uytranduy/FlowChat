@@ -263,6 +263,10 @@ export const useChatStore = create<ChatState>()(
         const { user } = useAuthStore.getState();
         const normalized = {
           ...message,
+          // An unpinned payload from an older server may omit these fields.
+          // Normalize them so merging cannot retain the previous pin badge.
+          pinnedAt: message.pinnedAt ?? null,
+          pinnedBy: message.pinnedBy ?? null,
           isOwn: message.senderId === user?._id,
         };
 
@@ -336,6 +340,19 @@ export const useChatStore = create<ChatState>()(
           conversationId
         );
         await get().addMessage(message);
+      },
+      updateMessagePin: async (conversationId, messageId, pinned) => {
+        const message = await chatService.updateMessagePin(
+          conversationId,
+          messageId,
+          pinned
+        );
+        get().updateMessage(message);
+        window.dispatchEvent(
+          new CustomEvent("flowchat:pins-changed", {
+            detail: { conversationId },
+          })
+        );
       },
       updateConversation: (conversation) => {
         set((state) => {

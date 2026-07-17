@@ -6,6 +6,7 @@ class User {
     required this.username,
     required this.email,
     required this.displayName,
+    this.authProvider = 'local',
     this.avatarUrl,
     this.bio,
     this.phone,
@@ -27,6 +28,7 @@ class User {
       username: username,
       email: stringValue(json['email']),
       displayName: displayName,
+      authProvider: stringValue(json['authProvider'], fallback: 'local'),
       avatarUrl: nullableString(json['avatarUrl']),
       bio: nullableString(json['bio']),
       phone: nullableString(json['phone']),
@@ -50,6 +52,7 @@ class User {
   final String username;
   final String email;
   final String displayName;
+  final String authProvider;
   final String? avatarUrl;
   final String? bio;
   final String? phone;
@@ -62,6 +65,7 @@ class User {
   final DateTime? updatedAt;
 
   String get preferredName => displayName.isNotEmpty ? displayName : username;
+  bool get usesGoogleAuth => authProvider == 'google';
 
   static User? tryParse(Object? value) {
     final map = jsonMapOrNull(value);
@@ -77,6 +81,7 @@ class User {
     String? username,
     String? email,
     String? displayName,
+    String? authProvider,
     String? avatarUrl,
     String? bio,
     String? phone,
@@ -93,6 +98,7 @@ class User {
       username: username ?? this.username,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
+      authProvider: authProvider ?? this.authProvider,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bio: bio ?? this.bio,
       phone: phone ?? this.phone,
@@ -111,6 +117,7 @@ class User {
     'username': username,
     'email': email,
     'displayName': displayName,
+    'authProvider': authProvider,
     if (avatarUrl != null) 'avatarUrl': avatarUrl,
     if (bio != null) 'bio': bio,
     if (phone != null) 'phone': phone,

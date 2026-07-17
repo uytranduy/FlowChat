@@ -1,7 +1,7 @@
 import { useChatStore } from "@/stores/useChatStore";
 import ChatWelcomeScreen from "./ChatWelcomeScreen";
 import MessageItem from "./MessageItem";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import InfiniteScroll from "react-infinite-scroll-component";
 import { toast } from "sonner";
 
@@ -93,7 +93,7 @@ const ChatWindowBody = () => {
     }
   };
 
-  const jumpToMessage = async (messageId: string) => {
+  const jumpToMessage = useCallback(async (messageId: string) => {
     if (!activeConversationId) return;
 
     const elementId = `message-${messageId}`;
@@ -127,7 +127,26 @@ const ChatWindowBody = () => {
     }
 
     toast.info("Tin nhắn gốc không còn trong cuộc trò chuyện này.");
-  };
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    const handleJump = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          conversationId?: string;
+          messageId?: string;
+        }>
+      ).detail;
+      if (
+        detail?.conversationId === activeConversationId &&
+        detail.messageId
+      ) {
+        void jumpToMessage(detail.messageId);
+      }
+    };
+    window.addEventListener("flowchat:jump-message", handleJump);
+    return () => window.removeEventListener("flowchat:jump-message", handleJump);
+  }, [activeConversationId, jumpToMessage]);
 
   const handleScrollSave = () => {
     const container = containerRef.current;

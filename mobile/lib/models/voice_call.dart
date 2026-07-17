@@ -43,6 +43,14 @@ class CallException implements Exception {
   String toString() => message;
 }
 
+String loggedOutCallMessage(String? displayName) {
+  final normalizedName = displayName?.trim();
+  final name = normalizedName == null || normalizedName.isEmpty
+      ? 'này'
+      : normalizedName;
+  return 'Người dùng $name hiện đã đăng xuất khỏi tài khoản nên không thể nhận cuộc gọi.';
+}
+
 String formatCallDuration(int totalSeconds) {
   final safeSeconds = totalSeconds < 0 ? 0 : totalSeconds;
   final hours = safeSeconds ~/ 3600;

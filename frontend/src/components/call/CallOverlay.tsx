@@ -293,13 +293,13 @@ const CallOverlay = ({
               "size-14 rounded-full",
               isVideo && "border-white/40 bg-black/35 text-white hover:bg-white/20"
             )}
-            aria-label="Chat trong cuộc gọi"
-            title="Chat trong cuộc gọi"
+            aria-label="Nhắn tin và gửi tệp trong cuộc gọi"
+            title="Nhắn tin và gửi ảnh, video, tệp"
             onClick={() => setChatOpen((value) => !value)}
           >
             <MessageSquare className="size-6" />
           </Button>
-          <span className="text-xs opacity-80">Nhắn tin</span>
+          <span className="text-xs opacity-80">Chat & tệp</span>
         </div>
       )}
 

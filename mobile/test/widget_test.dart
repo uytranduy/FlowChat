@@ -9,12 +9,14 @@ import 'package:flowchat_mobile/models/message.dart';
 import 'package:flowchat_mobile/models/user.dart';
 import 'package:flowchat_mobile/models/voice_call.dart';
 import 'package:flowchat_mobile/screens/chat/chat_widgets.dart';
+import 'package:flowchat_mobile/screens/profile/profile_screen.dart';
 import 'package:flowchat_mobile/state/app_controller.dart';
 import 'package:flowchat_mobile/state/call_controller.dart';
 import 'package:flowchat_mobile/theme/app_theme.dart';
 import 'package:flowchat_mobile/widgets/flow_chat_logo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   group('REST model parsing', () {
@@ -24,11 +26,13 @@ void main() {
         'username': 'flow',
         'email': 'flow@example.com',
         'displayName': 'Flow User',
+        'authProvider': 'google',
       });
 
       expect(user.id, 'user-1');
       expect(user.username, 'flow');
       expect(user.displayName, 'Flow User');
+      expect(user.usesGoogleAuth, isTrue);
     });
 
     test('accepts populated and plain ObjectId conversation fields', () {
@@ -76,6 +80,34 @@ void main() {
       expect(message.imgUrl, isNull);
     });
 
+    test('parses pinned message metadata', () {
+      final message = Message.fromJson({
+        '_id': 'message-pinned-1',
+        'conversationId': 'conversation-1',
+        'senderId': 'user-1',
+        'content': 'Tin nhắn quan trọng',
+        'pinnedAt': '2026-07-17T10:30:00.000Z',
+        'pinnedBy': 'user-2',
+        'createdAt': '2026-07-17T10:00:00.000Z',
+      });
+
+      expect(message.isPinned, isTrue);
+      expect(message.pinnedBy, 'user-2');
+      expect(message.pinnedAt, DateTime.utc(2026, 7, 17, 10, 30));
+
+      final unpinned = Message.fromJson({
+        '_id': 'message-pinned-1',
+        'conversationId': 'conversation-1',
+        'senderId': 'user-1',
+        'content': 'Tin nhắn quan trọng',
+        'pinnedAt': null,
+        'pinnedBy': null,
+        'createdAt': '2026-07-17T10:00:00.000Z',
+      });
+      expect(unpinned.isPinned, isFalse);
+      expect(unpinned.pinnedBy, isEmpty);
+    });
+
     test('parses group invitation permission and system messages', () {
       final conversation = Conversation.fromJson({
         '_id': 'group-1',
@@ -84,6 +116,7 @@ void main() {
           'name': 'Nhóm CDE',
           'createdBy': 'owner-1',
           'allowMembersToInvite': false,
+          'allowMembersToRename': false,
           'dissolvedAt': '2026-07-15T12:00:00.000Z',
           'dissolvedBy': 'owner-1',
         },
@@ -101,6 +134,7 @@ void main() {
       });
 
       expect(conversation.group?.allowMembersToInvite, isFalse);
+      expect(conversation.group?.allowMembersToRename, isFalse);
       expect(conversation.group?.isDissolved, isTrue);
       expect(conversation.group?.dissolvedById, 'owner-1');
       expect(message.messageType, MessageType.system);
@@ -133,6 +167,17 @@ void main() {
       expect(message.call?.durationSeconds, 152);
       expect(formatCallDuration(152), '2 phút 32 giây');
       expect(formatCallDuration(0), '0 phút 0 giây');
+    });
+
+    test('shows the called user name when their account is logged out', () {
+      expect(
+        loggedOutCallMessage('Nguyễn Bình'),
+        'Người dùng Nguyễn Bình hiện đã đăng xuất khỏi tài khoản nên không thể nhận cuộc gọi.',
+      );
+      expect(
+        loggedOutCallMessage(''),
+        'Người dùng này hiện đã đăng xuất khỏi tài khoản nên không thể nhận cuộc gọi.',
+      );
     });
 
     test('parses group call history metadata from the backend contract', () {
@@ -466,6 +511,51 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('FlowChat'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
+
+  testWidgets('profile dialogs keep controllers alive during close animation', (
+    tester,
+  ) async {
+    final controller = AppController()
+      ..currentUser = const User(
+        id: 'me',
+        username: 'flow_user',
+        email: 'flow@example.com',
+        displayName: 'Flow User',
+      );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppController>.value(
+        value: controller,
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+
+    await tester.ensureVisible(find.text('Chỉnh sửa hồ sơ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chỉnh sửa hồ sơ'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chỉnh sửa thông tin'), findsOneWidget);
+    await tester.tap(find.text('Huỷ'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Đổi mật khẩu'));
+    await tester.drag(find.byType(ListView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Đổi mật khẩu').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Mật khẩu hiện tại'), findsOneWidget);
+    await tester.tap(find.text('Huỷ'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();

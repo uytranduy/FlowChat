@@ -54,6 +54,7 @@ class ConversationGroup {
     required this.name,
     this.createdById,
     this.allowMembersToInvite = true,
+    this.allowMembersToRename = true,
     this.dissolvedAt,
     this.dissolvedById,
   });
@@ -65,6 +66,9 @@ class ConversationGroup {
       allowMembersToInvite: json['allowMembersToInvite'] is bool
           ? json['allowMembersToInvite'] as bool
           : true,
+      allowMembersToRename: json['allowMembersToRename'] is bool
+          ? json['allowMembersToRename'] as bool
+          : true,
       dissolvedAt: dateTimeOrNull(json['dissolvedAt']),
       dissolvedById: nullableString(objectId(json['dissolvedBy'])),
     );
@@ -73,6 +77,7 @@ class ConversationGroup {
   final String name;
   final String? createdById;
   final bool allowMembersToInvite;
+  final bool allowMembersToRename;
   final DateTime? dissolvedAt;
   final String? dissolvedById;
   bool get isDissolved => dissolvedAt != null;

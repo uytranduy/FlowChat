@@ -16,8 +16,8 @@ export interface AuthState {
     email: string,
     firstName: string,
     lastName: string
-  ) => Promise<void>;
-  signIn: (username: string, password: string) => Promise<void>;
+  ) => Promise<boolean>;
+  signIn: (username: string, password: string) => Promise<boolean>;
   signInWithGoogle: (idToken: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   fetchMe: () => Promise<void>;
@@ -71,6 +71,11 @@ export interface ChatState {
   setReaction: (messageId: string, emoji: string) => Promise<void>;
   removeReaction: (messageId: string) => Promise<void>;
   forwardMessage: (messageId: string, conversationId: string) => Promise<void>;
+  updateMessagePin: (
+    conversationId: string,
+    messageId: string,
+    pinned: boolean
+  ) => Promise<void>;
   // update convo
   updateConversation: (conversation: Partial<Conversation> & { _id: string }) => void;
   removeConversation: (conversationId: string) => void;

@@ -19,6 +19,8 @@ import {
   Forward,
   PhoneCall,
   PhoneMissed,
+  Pin,
+  PinOff,
   Reply,
   Smile,
   Undo2,
@@ -513,9 +515,11 @@ function MessageActions({
   const recallMessage = useChatStore((state) => state.recallMessage);
   const setReaction = useChatStore((state) => state.setReaction);
   const removeReaction = useChatStore((state) => state.removeReaction);
+  const updateMessagePin = useChatStore((state) => state.updateMessagePin);
   const [reactionOpen, setReactionOpen] = useState(false);
   const [updatingReaction, setUpdatingReaction] = useState(false);
   const [recalling, setRecalling] = useState(false);
+  const [updatingPin, setUpdatingPin] = useState(false);
   const isCallMessage = message.messageType === "call" || Boolean(message.call);
   const isRecalled = Boolean(message.isRecalled);
   const currentReaction = message.reactions?.find(
@@ -523,6 +527,7 @@ function MessageActions({
   );
   const canOpenMore = !isCallMessage && !isRecalled;
   const canReplyOrReact = !isRecalled;
+  const canChangePin = !message.pinnedAt || message.pinnedBy === user?._id;
 
   const handleRecall = async () => {
     if (recalling || !message.isOwn) return;
@@ -556,6 +561,24 @@ function MessageActions({
       toast.error("Không thể thả cảm xúc. Vui lòng thử lại.");
     } finally {
       setUpdatingReaction(false);
+    }
+  };
+
+  const handlePin = async () => {
+    if (updatingPin) return;
+    setUpdatingPin(true);
+    try {
+      await updateMessagePin(
+        message.conversationId,
+        message._id,
+        !message.pinnedAt
+      );
+      toast.success(message.pinnedAt ? "Đã bỏ ghim tin nhắn." : "Đã ghim tin nhắn.");
+    } catch (error) {
+      console.error("Không thể cập nhật ghim tin nhắn", error);
+      toast.error("Không thể cập nhật ghim tin nhắn.");
+    } finally {
+      setUpdatingPin(false);
     }
   };
 
@@ -594,6 +617,17 @@ function MessageActions({
             <DropdownMenuItem onSelect={onForward}>
               <Forward />
               Chuyển tiếp
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={updatingPin || !canChangePin}
+              onSelect={() => void handlePin()}
+            >
+              {message.pinnedAt && canChangePin ? <PinOff /> : <Pin />}
+              {message.pinnedAt
+                ? canChangePin
+                  ? "Bỏ ghim"
+                  : "Đã được người khác ghim"
+                : "Ghim tin nhắn"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -790,6 +824,18 @@ const MessageItem = ({
                     >
                       <Forward className="size-3" />
                       Đã chuyển tiếp
+                    </p>
+                  )}
+
+                  {message.pinnedAt && (
+                    <p
+                      className={cn(
+                        "mb-1.5 flex items-center gap-1 text-xs font-medium",
+                        message.isOwn ? "text-white/80" : "text-primary"
+                      )}
+                    >
+                      <Pin className="size-3" />
+                      Đã ghim
                     </p>
                   )}
 

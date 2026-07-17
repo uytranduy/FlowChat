@@ -228,6 +228,7 @@ class _InCallChatPanelState extends State<InCallChatPanel> {
   bool loading = true;
   bool sending = false;
   PlatformFile? pendingFile;
+  MessageAttachment? viewingImage;
 
   @override
   void initState() {
@@ -344,6 +345,14 @@ class _InCallChatPanelState extends State<InCallChatPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final image = viewingImage;
+    if (image != null) {
+      return _InCallImageViewer(
+        attachment: image,
+        onClose: () => setState(() => viewingImage = null),
+      );
+    }
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: .06),
@@ -364,8 +373,8 @@ class _InCallChatPanelState extends State<InCallChatPanel> {
             ),
             subtitle: Text(
               widget.isGroup
-                  ? 'Tin nhắn được lưu vào nhóm'
-                  : 'Tin nhắn được lưu vào đoạn chat',
+                  ? 'Tin nhắn và tệp được lưu vào nhóm'
+                  : 'Tin nhắn và tệp được lưu vào đoạn chat',
               style: const TextStyle(color: Colors.white60),
             ),
             trailing: widget.onClose == null
@@ -394,7 +403,12 @@ class _InCallChatPanelState extends State<InCallChatPanel> {
                     itemBuilder: (_, index) {
                       final message = messages[index];
                       final own = message.isOwn(widget.currentUserId);
-                      return _CallChatBubble(message: message, own: own);
+                      return _CallChatBubble(
+                        message: message,
+                        own: own,
+                        onImageTap: (attachment) =>
+                            setState(() => viewingImage = attachment),
+                      );
                     },
                   ),
           ),
@@ -491,10 +505,15 @@ class _InCallChatPanelState extends State<InCallChatPanel> {
 }
 
 class _CallChatBubble extends StatelessWidget {
-  const _CallChatBubble({required this.message, required this.own});
+  const _CallChatBubble({
+    required this.message,
+    required this.own,
+    required this.onImageTap,
+  });
 
   final Message message;
   final bool own;
+  final ValueChanged<MessageAttachment> onImageTap;
 
   @override
   Widget build(BuildContext context) {
@@ -531,9 +550,130 @@ class _CallChatBubble extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-            Text(text, style: const TextStyle(color: Colors.white)),
+            if (message.attachment case final attachment?)
+              if (attachment.isImage) ...[
+                const SizedBox(height: 4),
+                Semantics(
+                  button: true,
+                  label: 'Phóng to ảnh ${attachment.fileName}',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onImageTap(attachment),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: 120,
+                          maxWidth: 250,
+                          maxHeight: 180,
+                        ),
+                        child: Image.network(
+                          attachment.url,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null
+                              ? child
+                              : const SizedBox(
+                                  width: 120,
+                                  height: 120,
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                ),
+                          errorBuilder: (_, _, _) => const SizedBox(
+                            width: 120,
+                            height: 80,
+                            child: Center(
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            if (message.attachment?.isImage != true ||
+                message.content.trim().isNotEmpty)
+              Text(text, style: const TextStyle(color: Colors.white)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InCallImageViewer extends StatelessWidget {
+  const _InCallImageViewer({required this.attachment, required this.onClose});
+
+  final MessageAttachment attachment;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: InteractiveViewer(
+              minScale: .5,
+              maxScale: 4,
+              boundaryMargin: const EdgeInsets.all(80),
+              child: Center(
+                child: Image.network(
+                  attachment.url,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) => progress == null
+                      ? child
+                      : const Center(child: CircularProgressIndicator()),
+                  errorBuilder: (_, _, _) => const Center(
+                    child: Text(
+                      'Không thể tải ảnh.',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Semantics(
+              button: true,
+              label: 'Đóng trình xem ảnh',
+              child: IconButton.filled(
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+          ),
+          const Positioned(
+            left: 12,
+            right: 12,
+            bottom: 14,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.all(Radius.circular(18)),
+              ),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(
+                  'Dùng hai ngón tay để phóng to hoặc thu nhỏ',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

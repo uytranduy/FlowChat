@@ -46,6 +46,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final Map<String, GlobalKey> _messageKeys = {};
 
   List<Message> _messages = const [];
+  List<Message> _pinnedMessages = const [];
   Timer? _pollTimer;
   Timer? _presenceTimer;
   Timer? _messageHighlightTimer;
@@ -54,6 +55,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   int _handledCallHistoryRevision = 0;
   int _handledRelationshipRevision = 0;
   int _handledConversationRevision = 0;
+  int _handledMessagePinRevision = 0;
   Conversation? _latestConversation;
   String? _nextCursor;
   String? _initialError;
@@ -61,6 +63,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _loading = true;
   bool _loadingOlder = false;
   bool _polling = false;
+  bool _loadingPinned = false;
   bool _sending = false;
   bool _markingSeen = false;
   bool _syncFailed = false;
@@ -97,11 +100,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _handledCallHistoryRevision = callController.callHistoryRevision;
       _handledRelationshipRevision = callController.relationshipRevision;
       _handledConversationRevision = callController.conversationRevision;
+      _handledMessagePinRevision = callController.messagePinRevision;
       callController.addListener(_handleCallHistorySignal);
     }
     if (_initialized) return;
     _initialized = true;
     unawaited(_loadInitial());
+    unawaited(_loadPinnedMessages());
     unawaited(_loadRelationship());
     unawaited(_refreshActiveGroupCall());
     _startPolling();
@@ -194,6 +199,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (conversationRevision > _handledConversationRevision) {
       _handledConversationRevision = conversationRevision;
       unawaited(_refreshConversationState());
+    }
+
+    final pinRevision = callController.messagePinRevision;
+    if (pinRevision > _handledMessagePinRevision) {
+      _handledMessagePinRevision = pinRevision;
+      if (callController.messagePinConversationId == widget.conversation.id) {
+        unawaited(_loadPinnedMessages());
+        unawaited(_pollMessages());
+      }
     }
 
     final revision = callController.callHistoryRevision;
@@ -338,9 +352,37 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _loadPinnedMessages() async {
+    if (_loadingPinned) return;
+    _loadingPinned = true;
+    try {
+      final messages = await _app.chatService.getPinnedMessages(
+        widget.conversation.id,
+      );
+      if (!mounted) return;
+      final previousIds = _pinnedMessages.map((item) => item.id).join(',');
+      final nextIds = messages.map((item) => item.id).join(',');
+      if (previousIds != nextIds ||
+          messages.any((message) {
+            final previous = _pinnedMessages
+                .where((item) => item.id == message.id)
+                .firstOrNull;
+            return previous == null ||
+                hasMessagePresentationChanged(previous, message);
+          })) {
+        setState(() => _pinnedMessages = messages);
+      }
+    } catch (_) {
+      // Đồng bộ định kỳ sẽ tự thử lại khi kết nối ổn định.
+    } finally {
+      _loadingPinned = false;
+    }
+  }
+
   Future<void> _pollMessages() async {
     if (_loading || _polling || _sending) return;
     _polling = true;
+    unawaited(_loadPinnedMessages());
 
     try {
       final page = await _app.chatService.getMessages(
@@ -914,6 +956,33 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   onTap: () =>
                       Navigator.pop(sheetContext, _MessageMoreAction.forward),
                 ),
+                ListTile(
+                  leading: Icon(
+                    message.isPinned
+                        ? Icons.push_pin_outlined
+                        : Icons.push_pin_rounded,
+                  ),
+                  title: Text(
+                    message.isPinned && message.pinnedBy != _currentUserId
+                        ? 'Đã được người khác ghim'
+                        : message.isPinned
+                        ? 'Bỏ ghim'
+                        : 'Ghim tin nhắn',
+                  ),
+                  subtitle: Text(
+                    message.isPinned && message.pinnedBy != _currentUserId
+                        ? 'Chỉ người đã ghim mới có thể bỏ ghim'
+                        : message.isPinned
+                        ? 'Xóa tin nhắn khỏi danh sách đã ghim'
+                        : 'Lưu tin nhắn vào danh sách đã ghim',
+                  ),
+                  enabled:
+                      !message.isPinned || message.pinnedBy == _currentUserId,
+                  onTap: !message.isPinned || message.pinnedBy == _currentUserId
+                      ? () =>
+                            Navigator.pop(sheetContext, _MessageMoreAction.pin)
+                      : null,
+                ),
               ],
             ),
           ),
@@ -929,7 +998,68 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       case _MessageMoreAction.forward:
         await _forwardMessage(message);
         break;
+      case _MessageMoreAction.pin:
+        await _updateMessagePin(message);
+        break;
     }
+  }
+
+  Future<void> _updateMessagePin(Message message) async {
+    setState(() => _messageActionBusy.add(message.id));
+    try {
+      final updated = await _app.chatService.updateMessagePin(
+        _conversation.id,
+        message.id,
+        !message.isPinned,
+      );
+      if (!mounted) return;
+      _upsertMessage(updated);
+      setState(() {
+        _selectedMessageId = null;
+        _pinnedMessages = updated.isPinned
+            ? [
+                updated,
+                ..._pinnedMessages.where((item) => item.id != updated.id),
+              ]
+            : _pinnedMessages
+                  .where((item) => item.id != updated.id)
+                  .toList(growable: false);
+      });
+      unawaited(_loadPinnedMessages());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message.isPinned ? 'Đã bỏ ghim tin nhắn.' : 'Đã ghim tin nhắn.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        _showError(error, fallback: 'Không thể cập nhật ghim tin nhắn.');
+      }
+    } finally {
+      if (mounted) setState(() => _messageActionBusy.remove(message.id));
+    }
+  }
+
+  Future<void> _showMessageFinder({required bool pinned}) async {
+    final selected = await showModalBottomSheet<Message>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _MessageFinderSheet(
+        conversationId: _conversation.id,
+        pinned: pinned,
+        onLoad: (query) => pinned
+            ? _app.chatService.getPinnedMessages(_conversation.id)
+            : _app.chatService.searchMessages(_conversation.id, query),
+        senderName: _senderName,
+      ),
+    );
+    if (!mounted || selected == null) return;
+    await _jumpToMessage(selected.id);
   }
 
   Future<void> _recallMessage(Message message) async {
@@ -959,9 +1089,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final updated = await _app.chatService.recallMessage(message.id);
       if (!mounted) return;
       _upsertMessage(updated);
+      unawaited(_loadPinnedMessages());
       setState(() {
         _selectedMessageId = null;
         if (_replyingTo?.id == message.id) _replyingTo = null;
+        _pinnedMessages = _pinnedMessages
+            .where((item) => item.id != message.id)
+            .toList(growable: false);
       });
       widget.onConversationChanged?.call();
     } catch (error) {
@@ -1290,6 +1424,118 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  String _pinnedMessagePreview(Message message) {
+    final attachment = message.attachment;
+    if (attachment != null) {
+      final label = attachment.isImage
+          ? '📷 Ảnh'
+          : attachment.isVideo
+          ? '🎬 Video'
+          : '📎 ${attachment.fileName}';
+      return message.content.trim().isEmpty
+          ? label
+          : '$label · ${message.content.trim()}';
+    }
+    if (message.isCall) return '📞 Lịch sử cuộc gọi';
+    return message.content.trim().isEmpty ? 'Tin nhắn' : message.content.trim();
+  }
+
+  Widget _buildPinnedMessageBanner() {
+    if (_pinnedMessages.isEmpty) return const SizedBox.shrink();
+    final message = _pinnedMessages.first;
+    final remaining = _pinnedMessages.length - 1;
+    final colors = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+      child: Material(
+        color: colors.surface,
+        elevation: 2,
+        shadowColor: Colors.black26,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: colors.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 7, 4, 7),
+          child: Row(
+            children: [
+              Icon(Icons.chat_bubble_outline_rounded, color: colors.primary),
+              const SizedBox(width: 9),
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => unawaited(_jumpToMessage(message.id)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Tin nhắn',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        '${_senderName(message.senderId)}: ${_pinnedMessagePreview(message)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Material(
+                color: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(7),
+                  side: BorderSide(color: colors.outline),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => unawaited(_showMessageFinder(pinned: true)),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minWidth: 68,
+                      minHeight: 34,
+                      maxWidth: 96,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 9),
+                      child: Center(
+                        child: Text(
+                          remaining > 0 ? '+$remaining ghim' : '1 ghim',
+                          maxLines: 1,
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (message.pinnedBy == _currentUserId)
+                PopupMenuButton<String>(
+                  tooltip: 'Tùy chọn tin nhắn đã ghim',
+                  onSelected: (value) {
+                    if (value == 'unpin') unawaited(_updateMessagePin(message));
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'unpin',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.push_pin_outlined),
+                        title: Text('Bỏ ghim tin nhắn này'),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentConversation = _conversation;
@@ -1374,6 +1620,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Tìm kiếm tin nhắn',
+            onPressed: () => unawaited(_showMessageFinder(pinned: false)),
+            icon: const Icon(Icons.search_rounded),
+          ),
           if (currentConversation.isDirect)
             Consumer<CallController>(
               builder: (context, call, _) => IconButton(
@@ -1478,6 +1729,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         top: false,
         child: Column(
           children: [
+            _buildPinnedMessageBanner(),
             Expanded(
               child: ColoredBox(
                 color: _chatBackgroundColor(context),
@@ -2414,6 +2666,30 @@ class _MessageBubble extends StatelessWidget {
                             ),
                             const SizedBox(height: 3),
                           ],
+                          if (!recalled && message.isPinned) ...[
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.push_pin_rounded,
+                                  size: 13,
+                                  color: mine ? Colors.white70 : colors.primary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Đã ghim',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: mine
+                                            ? Colors.white70
+                                            : colors.primary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                          ],
                           if (!recalled && message.isForwarded) ...[
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -3123,7 +3399,203 @@ class _CallMessageBubble extends StatelessWidget {
   }
 }
 
-enum _MessageMoreAction { recall, forward }
+class _MessageFinderSheet extends StatefulWidget {
+  const _MessageFinderSheet({
+    required this.conversationId,
+    required this.pinned,
+    required this.onLoad,
+    required this.senderName,
+  });
+
+  final String conversationId;
+  final bool pinned;
+  final Future<List<Message>> Function(String query) onLoad;
+  final String Function(String userId) senderName;
+
+  @override
+  State<_MessageFinderSheet> createState() => _MessageFinderSheetState();
+}
+
+class _MessageFinderSheetState extends State<_MessageFinderSheet> {
+  final _controller = TextEditingController();
+  List<Message> _results = const [];
+  bool _loading = false;
+  String? _error;
+  CallController? _callController;
+  int _handledPinRevision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pinned) unawaited(_load());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!widget.pinned) return;
+    final callController = context.read<CallController>();
+    if (identical(callController, _callController)) return;
+    _callController?.removeListener(_handlePinUpdate);
+    _callController = callController;
+    _handledPinRevision = callController.messagePinRevision;
+    callController.addListener(_handlePinUpdate);
+  }
+
+  void _handlePinUpdate() {
+    final callController = _callController;
+    if (!mounted || callController == null) return;
+    if (callController.messagePinRevision <= _handledPinRevision) return;
+    _handledPinRevision = callController.messagePinRevision;
+    if (callController.messagePinConversationId == widget.conversationId) {
+      unawaited(_load());
+    }
+  }
+
+  @override
+  void dispose() {
+    _callController?.removeListener(_handlePinUpdate);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final query = _controller.text.trim();
+    if (!widget.pinned && query.isEmpty) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final messages = await widget.onLoad(query);
+      if (!mounted) return;
+      setState(() => _results = messages);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Không thể tải danh sách tin nhắn.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _preview(Message message) {
+    final attachment = message.attachment;
+    if (attachment != null) {
+      final label = attachment.isImage
+          ? '📷 Ảnh'
+          : attachment.isVideo
+          ? '🎬 Video'
+          : '📎 ${attachment.fileName}';
+      return message.content.trim().isEmpty
+          ? label
+          : '$label · ${message.content.trim()}';
+    }
+    if (message.isCall) return '📞 Lịch sử cuộc gọi';
+    return message.content.trim().isEmpty ? 'Tin nhắn' : message.content.trim();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * .76,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Icon(
+                  widget.pinned ? Icons.push_pin_rounded : Icons.search_rounded,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.pinned ? 'Tin nhắn đã ghim' : 'Tìm kiếm tin nhắn',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!widget.pinned)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => unawaited(_load()),
+                decoration: InputDecoration(
+                  hintText: 'Nhập nội dung hoặc tên tệp...',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: IconButton(
+                    onPressed: _loading ? null : () => unawaited(_load()),
+                    icon: const Icon(Icons.arrow_forward_rounded),
+                  ),
+                ),
+              ),
+            ),
+          const Divider(height: 1),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(child: Text(_error!))
+                : _results.isEmpty
+                ? Center(
+                    child: Text(
+                      widget.pinned
+                          ? 'Chưa có tin nhắn nào được ghim.'
+                          : _controller.text.trim().isEmpty
+                          ? 'Nhập từ khóa để tìm kiếm.'
+                          : 'Không tìm thấy tin nhắn phù hợp.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _results.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
+                    itemBuilder: (context, index) {
+                      final message = _results[index];
+                      return ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        leading: const Icon(Icons.chat_bubble_outline_rounded),
+                        title: Text(
+                          widget.senderName(message.senderId),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          _preview(message),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Text(
+                          DateFormat('dd/MM HH:mm').format(message.createdAt),
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        onTap: () => Navigator.pop(context, message),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _MessageMoreAction { recall, forward, pin }
 
 enum _AttachmentPickKind { image, video, file }
 
