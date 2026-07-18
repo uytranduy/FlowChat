@@ -55,6 +55,7 @@ class CallController extends ChangeNotifier {
   String? _callHistoryConversationId;
   int _friendRequestRevision = 0;
   String? _friendRequestSenderName;
+  String? _friendRequestMessage;
   bool _friendRequestReceived = false;
   int _relationshipRevision = 0;
   Set<String> _onlineUserIds = const {};
@@ -71,6 +72,7 @@ class CallController extends ChangeNotifier {
   String? get callHistoryConversationId => _callHistoryConversationId;
   int get friendRequestRevision => _friendRequestRevision;
   String? get friendRequestSenderName => _friendRequestSenderName;
+  String? get friendRequestMessage => _friendRequestMessage;
   bool get friendRequestReceived => _friendRequestReceived;
   int get relationshipRevision => _relationshipRevision;
   bool isUserOnline(String userId) => _onlineUserIds.contains(userId);
@@ -151,6 +153,7 @@ class CallController extends ChangeNotifier {
     _onlineUserIds = const {};
     _friendRequestReceived = false;
     _friendRequestSenderName = null;
+    _friendRequestMessage = null;
     socket?.dispose();
     _notify();
   }
@@ -237,6 +240,7 @@ class CallController extends ChangeNotifier {
     final sender = _map(request['from']);
     _friendRequestSenderName =
         _string(sender['displayName']) ?? _string(sender['username']);
+    _friendRequestMessage = _string(request['message']);
     _friendRequestReceived = true;
     _friendRequestRevision += 1;
     _notify();
@@ -245,6 +249,7 @@ class CallController extends ChangeNotifier {
   void _handleFriendRequestUpdated(Object? _) {
     _friendRequestReceived = false;
     _friendRequestSenderName = null;
+    _friendRequestMessage = null;
     _friendRequestRevision += 1;
     _notify();
   }

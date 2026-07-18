@@ -240,7 +240,33 @@ class _RequestList extends StatelessWidget {
                   ),
                   if (request.message.trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text('“${request.message.trim()}”'),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Lời giới thiệu',
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(request.message.trim()),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 12),
                   if (received)

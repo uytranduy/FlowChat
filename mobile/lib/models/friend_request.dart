@@ -62,6 +62,7 @@ class FriendRelationship {
     required this.hasBlockedMe,
     this.requestId,
     this.requestDirection,
+    this.requestMessage,
   });
 
   factory FriendRelationship.fromJson(Map<String, dynamic> json) {
@@ -72,6 +73,7 @@ class FriendRelationship {
       canSendMessage: boolValue(json['canSendMessage']),
       requestId: nullableString(objectId(request)),
       requestDirection: nullableString(request?['direction']),
+      requestMessage: nullableString(request?['message']),
       isBlocked: boolValue(jsonMapOrNull(json['blockStatus'])?['isBlocked']),
       isBlockedByMe: boolValue(
         jsonMapOrNull(json['blockStatus'])?['isBlockedByMe'],
@@ -87,6 +89,7 @@ class FriendRelationship {
   final bool canSendMessage;
   final String? requestId;
   final String? requestDirection;
+  final String? requestMessage;
   final bool isBlocked;
   final bool isBlockedByMe;
   final bool hasBlockedMe;

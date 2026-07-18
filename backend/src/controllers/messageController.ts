@@ -784,12 +784,9 @@ export const forwardMessage = async (req: Request, res: Response): Promise<any> 
       });
     }
 
-    if (
-      sourceMessage.messageType !== "text" &&
-      sourceMessage.messageType !== "attachment"
-    ) {
+    if (sourceMessage.messageType === "system") {
       return res.status(400).json({
-        message: "Không thể chuyển tiếp lịch sử cuộc gọi",
+        message: "Không thể chuyển tiếp thông báo hệ thống",
       });
     }
 
@@ -826,8 +823,9 @@ export const forwardMessage = async (req: Request, res: Response): Promise<any> 
                   }
                 : {}),
             },
-          }
+        }
         : {}),
+      ...(sourceMessage.call ? { call: sourceMessage.call } : {}),
       forwardedFrom: {
         messageId: sourceMessage._id,
       },

@@ -9,7 +9,7 @@ import '../state/app_controller.dart';
 import '../state/call_controller.dart';
 import '../theme/app_theme.dart';
 import 'user_avatar.dart';
-import 'group_call_overlay.dart' show InCallChatPanel;
+import 'group_call_overlay.dart' show InCallChatNavigator;
 
 class CallOverlay extends StatefulWidget {
   const CallOverlay({super.key});
@@ -39,36 +39,86 @@ class _CallOverlayState extends State<CallOverlay> {
         call.peer != null;
 
     return Positioned.fill(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          call.mediaType.isVideo
-              ? _VideoCallSurface(
-                  call: call,
-                  chatOpen: _chatOpen,
-                  onChatToggle: () => setState(() => _chatOpen = !_chatOpen),
-                )
-              : _AudioCallSurface(
-                  call: call,
-                  chatOpen: _chatOpen,
-                  onChatToggle: () => setState(() => _chatOpen = !_chatOpen),
-                ),
-          if (_chatOpen && canChat)
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 64, 12, 104),
-                child: InCallChatPanel(
+      child: _chatOpen && canChat
+          ? _DirectCallChatRoom(
+              call: call,
+              onChatToggle: () => setState(() => _chatOpen = false),
+            )
+          : call.mediaType.isVideo
+          ? _VideoCallSurface(
+              call: call,
+              chatOpen: _chatOpen,
+              onChatToggle: () => setState(() => _chatOpen = !_chatOpen),
+            )
+          : _AudioCallSurface(
+              call: call,
+              chatOpen: _chatOpen,
+              onChatToggle: () => setState(() => _chatOpen = !_chatOpen),
+            ),
+    );
+  }
+}
+
+class _DirectCallChatRoom extends StatelessWidget {
+  const _DirectCallChatRoom({required this.call, required this.onChatToggle});
+
+  final CallController call;
+  final VoidCallback onChatToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final peer = call.peer!;
+    return Material(
+      color: const Color(0xff0b1020),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 18, 12, 14),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  UserAvatar(
+                    name: peer.displayName,
+                    avatarUrl: peer.avatarUrl,
+                    radius: 19,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      peer.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  _CallStatus(call: call, foregroundColor: Colors.white70),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: InCallChatNavigator(
                   conversationId: call.conversationId!,
                   chatService: context.read<AppController>().chatService,
                   currentUserId:
                       context.read<AppController>().currentUser?.id ?? '',
                   isGroup: false,
-                  recipientId: call.peer!.id,
-                  onClose: () => setState(() => _chatOpen = false),
+                  recipientId: peer.id,
+                  onClose: onChatToggle,
                 ),
               ),
-            ),
-        ],
+              const SizedBox(height: 12),
+              _CallActions(
+                call: call,
+                chatOpen: true,
+                onChatToggle: onChatToggle,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

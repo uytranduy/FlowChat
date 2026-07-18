@@ -73,6 +73,19 @@ class ChatService {
         .toList(growable: false);
   }
 
+  Future<List<Message>> getMessagesAround(
+    String conversationId,
+    String messageId,
+  ) async {
+    final response = await _apiClient.get<dynamic>(
+      'conversations/$conversationId/messages/$messageId/around',
+      queryParameters: {'before': 20, 'after': 20},
+    );
+    return jsonList(
+      _apiClient.responseMap(response)['messages'],
+    ).map(Message.tryParse).whereType<Message>().toList(growable: false);
+  }
+
   Future<Message> updateMessagePin(
     String conversationId,
     String messageId,

@@ -71,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _refreshFriendRequests(
         showNotification: callController.friendRequestReceived,
         senderName: callController.friendRequestSenderName,
+        introduction: callController.friendRequestMessage,
       ),
     );
   }
@@ -78,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _refreshFriendRequests({
     bool showNotification = false,
     String? senderName,
+    String? introduction,
   }) async {
     try {
       final requests = await context
@@ -104,13 +106,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ? null
           : newRequests.first.from?.displayName;
       final displayName = (senderName ?? discoveredSenderName)?.trim();
+      final discoveredIntroduction = newRequests.isEmpty
+          ? null
+          : newRequests.first.message.trim();
+      final requestIntroduction = (introduction ?? discoveredIntroduction)
+          ?.trim();
       final messenger = ScaffoldMessenger.of(context);
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: Text(
-              displayName == null || displayName.isEmpty
+              requestIntroduction != null && requestIntroduction.isNotEmpty
+                  ? '${displayName ?? 'Một người dùng'}: “$requestIntroduction”'
+                  : displayName == null || displayName.isEmpty
                   ? 'Bạn có một lời mời kết bạn mới.'
                   : '$displayName đã gửi cho bạn một lời mời kết bạn.',
             ),

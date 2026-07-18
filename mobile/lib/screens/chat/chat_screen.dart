@@ -791,9 +791,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _selectMessage(Message message) {
-    if (message.messageType == MessageType.call ||
-        message.messageType == MessageType.system ||
-        message.isRecalled) {
+    if (message.messageType == MessageType.system || message.isRecalled) {
       return;
     }
     setState(() {
@@ -802,9 +800,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _beginReply(Message message) {
-    if (message.messageType == MessageType.call ||
-        message.messageType == MessageType.system ||
-        message.isRecalled) {
+    if (message.messageType == MessageType.system || message.isRecalled) {
       return;
     }
     setState(() {
@@ -930,7 +926,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
-        final canRecall = message.senderId == _currentUserId;
+        final canRecall = message.senderId == _currentUserId && !message.isCall;
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -1889,9 +1885,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 message.createdAt,
               ) ||
               showDate;
-          final mine =
-              message.call?.isOutgoingFor(_currentUserId) ??
-              message.senderId == _currentUserId;
+          final mine = message.isForwarded
+              ? message.senderId == _currentUserId
+              : message.call?.isOutgoingFor(_currentUserId) ??
+                    message.senderId == _currentUserId;
           final showAvatar =
               !mine &&
               (previousMessage == null ||
@@ -2024,12 +2021,36 @@ class _MessageRequestBanner extends StatelessWidget {
       );
     }
     if (relationship.isIncomingRequest) {
+      final introduction = relationship.requestMessage?.trim();
       return Material(
         color: colors.surfaceContainerHighest,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
           child: Column(
             children: [
+              if (introduction != null && introduction.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Lời giới thiệu từ $otherName',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(color: colors.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(introduction),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 9),
+              ],
               Text(
                 'Chấp nhận để bạn và $otherName trở thành bạn bè, sau đó có thể nhắn tin và gọi điện cho nhau.',
                 textAlign: TextAlign.center,
@@ -2531,13 +2552,61 @@ class _MessageBubble extends StatelessWidget {
     }
 
     if (message.call case final call?) {
-      return _CallMessageBubble(
-        metadata: call,
-        mine: mine,
-        senderName: senderName,
-        senderAvatarUrl: senderAvatarUrl,
-        showAvatar: showAvatar,
-        onCallBack: onCallBack,
+      final summaries = summarizeMessageReactions(
+        message.reactions,
+        currentUserId,
+      );
+      return Column(
+        crossAxisAlignment: mine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          AnimatedSize(
+            duration: const Duration(milliseconds: 150),
+            child: selected
+                ? Padding(
+                    padding: EdgeInsets.only(left: mine ? 0 : 36, bottom: 3),
+                    child: _MessageActionBar(
+                      busy: actionBusy,
+                      onMore: onMore,
+                      onReply: onReply,
+                      onReact: onReact,
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onSelect,
+            onLongPress: onSelect,
+            child: _CallMessageBubble(
+              metadata: call,
+              mine: mine,
+              senderName: senderName,
+              senderAvatarUrl: senderAvatarUrl,
+              showAvatar: showAvatar,
+              onAvatarTap: onAvatarTap,
+              onCallBack: onCallBack,
+            ),
+          ),
+          if (summaries.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(left: mine ? 0 : 36, top: 3),
+              child: Wrap(
+                alignment: mine ? WrapAlignment.end : WrapAlignment.start,
+                spacing: 4,
+                runSpacing: 3,
+                children: [
+                  for (final summary in summaries)
+                    _ReactionChip(
+                      summary: summary,
+                      busy: actionBusy,
+                      onTap: () => onReactionTap(summary),
+                    ),
+                ],
+              ),
+            ),
+        ],
       );
     }
 
@@ -3229,6 +3298,7 @@ class _CallMessageBubble extends StatelessWidget {
     required this.senderName,
     required this.senderAvatarUrl,
     required this.showAvatar,
+    required this.onAvatarTap,
     required this.onCallBack,
   });
 
@@ -3237,6 +3307,7 @@ class _CallMessageBubble extends StatelessWidget {
   final String senderName;
   final String? senderAvatarUrl;
   final bool showAvatar;
+  final VoidCallback onAvatarTap;
   final Future<void> Function(CallMediaType mediaType) onCallBack;
 
   @override
@@ -3270,10 +3341,14 @@ class _CallMessageBubble extends StatelessWidget {
               SizedBox(
                 width: 30,
                 child: showAvatar
-                    ? ChatAvatar(
-                        label: senderName,
-                        imageUrl: senderAvatarUrl,
-                        radius: 14,
+                    ? InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: onAvatarTap,
+                        child: ChatAvatar(
+                          label: senderName,
+                          imageUrl: senderAvatarUrl,
+                          radius: 14,
+                        ),
                       )
                     : null,
               ),

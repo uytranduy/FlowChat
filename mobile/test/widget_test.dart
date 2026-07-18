@@ -5,15 +5,19 @@ import 'package:flowchat_mobile/core/network/api_exception.dart';
 import 'package:flowchat_mobile/core/config/app_config.dart';
 import 'package:flowchat_mobile/core/utils/presence.dart';
 import 'package:flowchat_mobile/models/conversation.dart';
+import 'package:flowchat_mobile/models/friend_request.dart';
 import 'package:flowchat_mobile/models/message.dart';
 import 'package:flowchat_mobile/models/user.dart';
 import 'package:flowchat_mobile/models/voice_call.dart';
 import 'package:flowchat_mobile/screens/chat/chat_widgets.dart';
 import 'package:flowchat_mobile/screens/profile/profile_screen.dart';
+import 'package:flowchat_mobile/services/chat_service.dart';
 import 'package:flowchat_mobile/state/app_controller.dart';
 import 'package:flowchat_mobile/state/call_controller.dart';
 import 'package:flowchat_mobile/theme/app_theme.dart';
 import 'package:flowchat_mobile/widgets/flow_chat_logo.dart';
+import 'package:flowchat_mobile/widgets/call_overlay.dart';
+import 'package:flowchat_mobile/widgets/group_call_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -33,6 +37,37 @@ void main() {
       expect(user.username, 'flow');
       expect(user.displayName, 'Flow User');
       expect(user.usesGoogleAuth, isTrue);
+    });
+
+    test('preserves the introduction in an incoming friend request', () {
+      final request = FriendRequest.fromJson({
+        '_id': 'request-1',
+        'from': {
+          '_id': 'user-a',
+          'username': 'user_a',
+          'displayName': 'Người dùng A',
+        },
+        'to': 'user-b',
+        'message': 'Xin chào, mình muốn kết bạn với bạn.',
+        'createdAt': '2026-07-18T08:00:00.000Z',
+      });
+      final relationship = FriendRelationship.fromJson({
+        'isFriend': false,
+        'canCall': false,
+        'canSendMessage': false,
+        'request': {
+          '_id': 'request-1',
+          'direction': 'incoming',
+          'message': request.message,
+        },
+      });
+
+      expect(request.message, 'Xin chào, mình muốn kết bạn với bạn.');
+      expect(relationship.isIncomingRequest, isTrue);
+      expect(
+        relationship.requestMessage,
+        'Xin chào, mình muốn kết bạn với bạn.',
+      );
     });
 
     test('accepts populated and plain ObjectId conversation fields', () {
@@ -352,6 +387,128 @@ void main() {
     });
   });
 
+  testWidgets('in-call chat panel renders instead of a blank surface', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (_, child) => Stack(
+          children: [
+            ?child,
+            Positioned.fill(
+              child: Material(
+                color: const Color(0xff0b1020),
+                child: InCallChatNavigator(
+                  conversationId: 'conversation-1',
+                  chatService: _FakeChatService(),
+                  currentUserId: 'me',
+                  isGroup: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+        home: const SizedBox.shrink(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Chat trong cuộc gọi'), findsOneWidget);
+    expect(find.text('hello'), findsOneWidget);
+    expect(
+      () => Material.of(tester.element(find.byType(ListTile).first)),
+      returnsNormally,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('direct in-call chat exposes the same tools as group chat', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (_, child) => Stack(
+          children: [
+            ?child,
+            Positioned.fill(
+              child: Material(
+                color: const Color(0xff0b1020),
+                child: InCallChatNavigator(
+                  conversationId: 'conversation-1',
+                  chatService: _FakeChatService(),
+                  currentUserId: 'me',
+                  isGroup: false,
+                  recipientId: 'friend',
+                ),
+              ),
+            ),
+          ],
+        ),
+        home: const SizedBox.shrink(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('Tìm kiếm tin nhắn'), findsOneWidget);
+    expect(find.text('Tin nhắn đã ghim'), findsOneWidget);
+    expect(find.text('Ảnh, video và tệp'), findsOneWidget);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('hello'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.reply_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.emoji_emotions_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('direct audio call switches to the group-style chat layout', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = AppController()
+      ..currentUser = const User(
+        id: 'me',
+        username: 'me',
+        email: 'me@example.com',
+        displayName: 'Tôi',
+      );
+    final call = controller.callController
+      ..status = VoiceCallStatus.active
+      ..peer = const CallPeer(id: 'friend', displayName: 'Hoàng Quang')
+      ..conversationId = 'conversation-1'
+      ..mediaType = CallMediaType.audio;
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppController>.value(value: controller),
+          ChangeNotifierProvider<CallController>.value(value: call),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: Stack(children: [CallOverlay()])),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.chat_bubble_outline_rounded));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Hoàng Quang'), findsOneWidget);
+    expect(find.text('Chat trong cuộc gọi'), findsOneWidget);
+    expect(find.text('Nhắn tin...'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 50));
+    controller.dispose();
+  });
+
   group('REST infrastructure', () {
     test('extracts refreshToken from Set-Cookie', () {
       final client = ApiClient();
@@ -560,4 +717,28 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });
+}
+
+class _FakeChatService implements ChatService {
+  @override
+  Future<MessagePage> getMessages(
+    String conversationId, {
+    int limit = 50,
+    String? cursor,
+  }) async => MessagePage(
+    messages: [
+      Message.fromJson({
+        '_id': 'message-1',
+        'conversationId': conversationId,
+        'senderId': 'friend',
+        'content': 'hello',
+        'messageType': 'text',
+        'createdAt': '2026-07-18T08:00:00.000Z',
+      }),
+    ],
+    nextCursor: null,
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

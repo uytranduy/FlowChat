@@ -329,7 +329,7 @@ class _ConversationListScreenState extends State<ConversationListScreen>
           onPressed: _chooseConversationType,
           tooltip: 'Tạo cuộc trò chuyện',
           icon: const Icon(Icons.edit_rounded),
-          label: const Text('Trò chuyện mới'),
+          label: const Text('Trò chuyện'),
         ),
       ),
     );

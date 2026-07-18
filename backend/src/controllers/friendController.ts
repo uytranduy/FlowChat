@@ -29,6 +29,16 @@ export const sendFriendRequest = async (req: Request, res: Response): Promise<an
       return res.status(400).json({ message: "Mã người nhận không hợp lệ" });
     }
 
+    if (message != null && typeof message !== "string") {
+      return res.status(400).json({ message: "Lời giới thiệu không hợp lệ" });
+    }
+    const introduction = typeof message === "string" ? message.trim() : "";
+    if (introduction.length > 300) {
+      return res
+        .status(400)
+        .json({ message: "Lời giới thiệu không được vượt quá 300 ký tự" });
+    }
+
     if (from.toString() === to) {
       return res
         .status(400)
@@ -78,7 +88,7 @@ export const sendFriendRequest = async (req: Request, res: Response): Promise<an
     const request = await FriendRequest.create({
       from,
       to,
-      message,
+      message: introduction || undefined,
     });
 
     await request.populate([

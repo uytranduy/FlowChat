@@ -46,8 +46,15 @@ export default function MessageRequestBanner({ relationship, otherUser, onChange
   };
 
   if (relationship.request?.direction === "incoming") {
+    const introduction = relationship.request.message?.trim();
     return (
       <div className="border-t bg-muted/70 px-4 py-3">
+        {introduction && (
+          <div className="mx-auto mb-3 max-w-xl rounded-lg border bg-background/80 px-3 py-2 text-left">
+            <p className="text-xs font-medium text-muted-foreground">Lời giới thiệu từ {otherUser.displayName}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm">{introduction}</p>
+          </div>
+        )}
         <p className="text-center text-sm text-muted-foreground">
           Nếu chấp nhận, bạn và <strong>{otherUser.displayName}</strong> sẽ trở thành bạn bè và có thể nhắn tin, gọi điện cho nhau.
         </p>

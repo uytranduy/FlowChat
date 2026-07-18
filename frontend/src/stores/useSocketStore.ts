@@ -170,7 +170,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         void useFriendStore.getState().getAllFriendRequests();
         if (useAuthStore.getState().user?.notificationsEnabled === false) return;
         const senderName = request?.from?.displayName || "Một người dùng";
-        const description = `${senderName} đã gửi cho bạn một lời mời kết bạn.`;
+        const introduction = request?.message?.trim();
+        const description = introduction
+          ? `${senderName}: “${introduction}”`
+          : `${senderName} đã gửi cho bạn một lời mời kết bạn.`;
 
         toast.message("Lời mời kết bạn mới", {
           description,

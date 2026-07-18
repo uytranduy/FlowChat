@@ -49,6 +49,17 @@ export const chatService = {
     return res.data.messages;
   },
 
+  async fetchMessagesAround(
+    conversationId: string,
+    messageId: string
+  ): Promise<Message[]> {
+    const res = await api.get(
+      `/conversations/${conversationId}/messages/${messageId}/around`,
+      { params: { before: 20, after: 20 } }
+    );
+    return res.data.messages;
+  },
+
   async updateMessagePin(
     conversationId: string,
     messageId: string,

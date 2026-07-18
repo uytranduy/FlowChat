@@ -19,6 +19,7 @@ interface MessageFinderDialogProps {
   mode: "search" | "pinned";
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSelectMessage?: (message: Message) => void | Promise<void>;
 }
 
 function messagePreview(message: Message): string {
@@ -43,6 +44,7 @@ export default function MessageFinderDialog({
   mode,
   open,
   onOpenChange,
+  onSelectMessage,
 }: MessageFinderDialogProps) {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -117,11 +119,15 @@ export default function MessageFinderDialog({
     [conversation.participants]
   );
 
-  const jumpTo = (messageId: string) => {
+  const jumpTo = (message: Message) => {
     onOpenChange(false);
+    if (onSelectMessage) {
+      void onSelectMessage(message);
+      return;
+    }
     window.dispatchEvent(
       new CustomEvent("flowchat:jump-message", {
-        detail: { conversationId: conversation._id, messageId },
+        detail: { conversationId: conversation._id, messageId: message._id },
       })
     );
   };
@@ -174,7 +180,7 @@ export default function MessageFinderDialog({
                 key={message._id}
                 type="button"
                 className="flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-muted"
-                onClick={() => jumpTo(message._id)}
+                onClick={() => jumpTo(message)}
               >
                 <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
                 <span className="min-w-0 flex-1">
