@@ -4,6 +4,15 @@ import { authService } from "@/services/authService";
 import type { AuthState } from "@/types/store";
 import { persist } from "zustand/middleware";
 import { useChatStore } from "./useChatStore";
+import axios from "axios";
+
+function authErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -29,14 +38,23 @@ export const useAuthStore = create<AuthState>()(
           set({ loading: true });
 
           //  gọi api
-          await authService.signUp(username, password, email, firstName, lastName);
+          const response = await authService.signUp(
+            username,
+            password,
+            email,
+            firstName,
+            lastName
+          );
 
           toast.success(
-            "Đăng ký thành công! Bạn sẽ được chuyển sang trang đăng nhập."
+            response?.message ||
+              "Đăng ký thành công. Vui lòng kiểm tra email để xác minh tài khoản."
           );
+          return true;
         } catch (error) {
           console.error(error);
-          toast.error("Đăng ký không thành công");
+          toast.error(authErrorMessage(error, "Đăng ký không thành công"));
+          return false;
         } finally {
           set({ loading: false });
         }
@@ -53,9 +71,29 @@ export const useAuthStore = create<AuthState>()(
           useChatStore.getState().fetchConversations();
 
           toast.success("Chào mừng bạn quay lại với FlowChat 🎉");
+          return true;
         } catch (error) {
           console.error(error);
-          toast.error("Đăng nhập không thành công!");
+          toast.error(authErrorMessage(error, "Đăng nhập không thành công!"));
+          return false;
+        } finally {
+          set({ loading: false });
+        }
+      },
+      signInWithGoogle: async (idToken) => {
+        try {
+          get().clearState();
+          set({ loading: true });
+          const { accessToken } = await authService.signInWithGoogle(idToken);
+          get().setAccessToken(accessToken);
+          await get().fetchMe();
+          await useChatStore.getState().fetchConversations();
+          toast.success("Đăng nhập bằng Google thành công 🎉");
+          return true;
+        } catch (error) {
+          console.error(error);
+          toast.error("Đăng nhập bằng Google không thành công!");
+          return false;
         } finally {
           set({ loading: false });
         }

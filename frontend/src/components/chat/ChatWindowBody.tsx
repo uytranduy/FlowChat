@@ -1,8 +1,9 @@
 import { useChatStore } from "@/stores/useChatStore";
 import ChatWelcomeScreen from "./ChatWelcomeScreen";
 import MessageItem from "./MessageItem";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import InfiniteScroll from "react-infinite-scroll-component";
+import { toast } from "sonner";
 
 const ChatWindowBody = () => {
   const {
@@ -10,10 +11,15 @@ const ChatWindowBody = () => {
     conversations,
     messages: allMessages,
     fetchMessages,
+    refreshLatestMessages,
   } = useChatStore();
   const [lastMessageStatus, setLastMessageStatus] = useState<"delivered" | "seen">(
     "delivered"
   );
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(
+    null
+  );
+  const [initialLoading, setInitialLoading] = useState(false);
 
   const messages = allMessages[activeConversationId!]?.items ?? [];
   const reversedMessages = [...messages].reverse();
@@ -24,6 +30,37 @@ const ChatWindowBody = () => {
   // ref
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const highlightTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current !== null) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      setInitialLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const hasCachedPage = Boolean(
+      useChatStore.getState().messages[activeConversationId]
+    );
+    setInitialLoading(!hasCachedPage);
+
+    void refreshLatestMessages(activeConversationId).finally(() => {
+      if (!cancelled) setInitialLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationId, refreshLatestMessages]);
 
   // seen status
   useEffect(() => {
@@ -56,6 +93,61 @@ const ChatWindowBody = () => {
     }
   };
 
+  const jumpToMessage = useCallback(async (messageId: string) => {
+    if (!activeConversationId) return;
+
+    const elementId = `message-${messageId}`;
+    let previousCount = -1;
+
+    // Tin được trả lời có thể nằm ở một trang cũ chưa tải. Tải tuần tự để
+    // không gửi nhiều request cùng một cursor rồi mới tìm phần tử trong DOM.
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHighlightedMessageId(messageId);
+        if (highlightTimerRef.current !== null) {
+          window.clearTimeout(highlightTimerRef.current);
+        }
+        highlightTimerRef.current = window.setTimeout(
+          () => setHighlightedMessageId(null),
+          2200
+        );
+        return;
+      }
+
+      const page = useChatStore.getState().messages[activeConversationId];
+      const count = page?.items.length ?? 0;
+      if (page?.nextCursor === null || page?.hasMore === false || count === previousCount) {
+        break;
+      }
+      previousCount = count;
+      await useChatStore.getState().fetchMessages(activeConversationId);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+
+    toast.info("Tin nhắn gốc không còn trong cuộc trò chuyện này.");
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    const handleJump = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          conversationId?: string;
+          messageId?: string;
+        }>
+      ).detail;
+      if (
+        detail?.conversationId === activeConversationId &&
+        detail.messageId
+      ) {
+        void jumpToMessage(detail.messageId);
+      }
+    };
+    window.addEventListener("flowchat:jump-message", handleJump);
+    return () => window.removeEventListener("flowchat:jump-message", handleJump);
+  }, [activeConversationId, jumpToMessage]);
+
   const handleScrollSave = () => {
     const container = containerRef.current;
     if (!container || !activeConversationId) {
@@ -83,10 +175,18 @@ const ChatWindowBody = () => {
         container.scrollTop = scrollTop;
       });
     }
-  }, [messages.length]);
+  }, [key, messages.length]);
 
   if (!selectedConvo) {
     return <ChatWelcomeScreen />;
+  }
+
+  if (initialLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
   }
 
   if (!messages?.length) {
@@ -127,6 +227,8 @@ const ChatWindowBody = () => {
               messages={reversedMessages}
               selectedConvo={selectedConvo}
               lastMessageStatus={lastMessageStatus}
+              highlighted={highlightedMessageId === message._id}
+              onJumpToMessage={jumpToMessage}
             />
           ))}
         </InfiniteScroll>

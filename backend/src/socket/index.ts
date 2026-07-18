@@ -4,6 +4,12 @@ import express from "express";
 import { socketAuthMiddleware } from "../middlewares/socketMiddleware.js";
 import { getUserConversationsForSocketIO } from "../controllers/conversationController.js";
 import { config } from "../config/index.js";
+import { CallSignaling } from "./callSignaling.js";
+import { Types } from "mongoose";
+import Conversation from "../models/Conversation.js";
+import User from "../models/User.js";
+
+const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
 const app = express();
 const server = http.createServer(app);
@@ -17,7 +23,25 @@ const io = new Server(server, {
 
 io.use(socketAuthMiddleware);
 
-const onlineUsers = new Map<string, string>(); // {userId: socketId}
+const onlineUsers = new Map<string, Set<string>>(); // {userId: socketIds}
+const callSignaling = new CallSignaling(io, onlineUsers);
+
+export function isUserOnline(userId: string): boolean {
+  return (onlineUsers.get(userId)?.size ?? 0) > 0;
+}
+
+export async function broadcastOnlineUsers(): Promise<void> {
+  const connectedUserIds = Array.from(onlineUsers.keys());
+  if (connectedUserIds.length === 0) {
+    io.emit("online-users", []);
+    return;
+  }
+  const visibleUserIds = await User.find({
+    _id: { $in: connectedUserIds },
+    showOnlineStatus: { $ne: false },
+  }).distinct("_id");
+  io.emit("online-users", visibleUserIds.map((id) => id.toString()));
+}
 
 io.on("connection", async (socket) => {
   const user = socket.user;
@@ -27,24 +51,62 @@ io.on("connection", async (socket) => {
 
   const userIdStr = user._id.toString();
 
-  onlineUsers.set(userIdStr, socket.id);
+  const userSockets = onlineUsers.get(userIdStr) ?? new Set<string>();
+  userSockets.add(socket.id);
+  onlineUsers.set(userIdStr, userSockets);
 
-  io.emit("online-users", Array.from(onlineUsers.keys()));
+  await broadcastOnlineUsers();
+
+  // User rooms intentionally contain every web/mobile socket for that account.
+  socket.join(userIdStr);
+  callSignaling.registerSocket(socket);
+
+  socket.on("disconnect", () => {
+    const connectedSockets = onlineUsers.get(userIdStr);
+    connectedSockets?.delete(socket.id);
+    if (connectedSockets?.size === 0) {
+      onlineUsers.delete(userIdStr);
+      void User.findByIdAndUpdate(userIdStr, { $set: { lastSeenAt: new Date() } });
+    }
+
+    callSignaling.handleDisconnect(socket);
+    void broadcastOnlineUsers();
+  });
 
   const conversationIds = await getUserConversationsForSocketIO(user._id);
+  if (!socket.connected) return;
+
   conversationIds.forEach((id) => {
     socket.join(id);
   });
 
-  socket.on("join-conversation", (conversationId: string) => {
-    socket.join(conversationId);
-  });
+  socket.on("join-conversation", async (rawConversationId: unknown, ack?: unknown) => {
+    const acknowledge = typeof ack === "function" ? ack : undefined;
+    if (
+      typeof rawConversationId !== "string" ||
+      !OBJECT_ID_PATTERN.test(rawConversationId)
+    ) {
+      acknowledge?.({ ok: false, error: "INVALID_CONVERSATION" });
+      return;
+    }
 
-  socket.join(userIdStr);
+    const conversationId = new Types.ObjectId(rawConversationId).toString();
+    try {
+      const isMember = await Conversation.exists({
+        _id: conversationId,
+        "participants.userId": user._id,
+      });
+      if (!isMember || !socket.connected) {
+        acknowledge?.({ ok: false, error: "CONVERSATION_NOT_FOUND" });
+        return;
+      }
 
-  socket.on("disconnect", () => {
-    onlineUsers.delete(userIdStr);
-    io.emit("online-users", Array.from(onlineUsers.keys()));
+      await socket.join(conversationId);
+      acknowledge?.({ ok: true });
+    } catch (error) {
+      console.error("Lỗi khi tham gia phòng trò chuyện", error);
+      acknowledge?.({ ok: false, error: "INTERNAL_ERROR" });
+    }
   });
 });
 

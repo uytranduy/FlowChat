@@ -114,6 +114,44 @@
         }
       }
     },
+    "/auth/google": {
+      "post": {
+        "summary": "Đăng nhập hoặc đăng ký bằng Google",
+        "description": "Xác minh Google ID token, liên kết tài khoản theo email đã xác minh hoặc tạo tài khoản mới.",
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idToken": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "idToken"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Đăng nhập thành công và trả về access token"
+          },
+          "401": {
+            "description": "Google ID token không hợp lệ"
+          },
+          "503": {
+            "description": "Máy chủ chưa cấu hình Google Client ID"
+          }
+        }
+      }
+    },
     "/auth/signout": {
       "post": {
         "summary": "SignOut",
@@ -235,6 +273,40 @@
                   },
                   "content": {
                     "type": "string"
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "replyToMessageId": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "recipientId",
+                  "file"
+                ],
+                "properties": {
+                  "recipientId": {
+                    "type": "string"
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Optional attachment caption"
+                  },
+                  "replyToMessageId": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
                   }
                 }
               }
@@ -309,6 +381,34 @@
                   },
                   "content": {
                     "type": "string"
+                  },
+                  "replyToMessageId": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "conversationId",
+                  "file"
+                ],
+                "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "Optional attachment caption"
+                  },
+                  "replyToMessageId": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
                   }
                 }
               }

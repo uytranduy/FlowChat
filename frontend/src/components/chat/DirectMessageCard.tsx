@@ -7,11 +7,17 @@ import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
 import UnreadCountBadge from "./UnreadCountBadge";
 import { useSocketStore } from "@/stores/useSocketStore";
+import { chatService } from "@/services/chatService";
+import { toast } from "sonner";
 
 const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
   const { user } = useAuthStore();
-  const { activeConversationId, setActiveConversation, messages, fetchMessages } =
-    useChatStore();
+  const {
+    activeConversationId,
+    setActiveConversation,
+    refreshLatestMessages,
+    updateConversation,
+  } = useChatStore();
   const { onlineUsers } = useSocketStore();
 
   if (!user) return null;
@@ -19,13 +25,62 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
   const otherUser = convo.participants.find((p) => p._id !== user._id);
   if (!otherUser) return null;
 
-  const unreadCount = convo.unreadCounts[user._id];
-  const lastMessage = convo.lastMessage?.content ?? "";
+  const unreadCount = convo.unreadCounts?.[user._id] ?? 0;
+  const last = convo.lastMessage;
+  const isCallPreview =
+    last?.messageType === "call" ||
+    last?.content === "Cuộc gọi thoại" ||
+    last?.content === "Cuộc gọi video";
+  const callDuration = last?.call?.durationSeconds ?? 0;
+  const durationPreview =
+    callDuration > 0
+      ? ` · ${Math.floor(callDuration / 60)}p ${callDuration % 60}s`
+      : "";
+  const populatedSenderId =
+    typeof last?.senderId === "string" ? last.senderId : last?.senderId?._id;
+  const lastSenderId = last?.sender?._id ?? populatedSenderId;
+  const attachmentPreview =
+    last?.attachment?.kind === "image"
+      ? "📷 Ảnh"
+      : last?.attachment?.kind === "video"
+        ? "🎬 Video"
+        : last?.attachment
+          ? `📎 ${last.attachment.fileName || "Tệp đính kèm"}`
+          : null;
+  const lastMessage = isCallPreview
+    ? `${last?.content ?? "Cuộc gọi"} ${
+        lastSenderId === user._id ? "đi" : "đến"
+      }${durationPreview}`
+    : last?.isRecalled
+      ? "Tin nhắn đã thu hồi"
+      : attachmentPreview
+        ? `${attachmentPreview}${last?.content?.trim() ? ` · ${last.content.trim()}` : ""}`
+        : (last?.content ?? "");
 
   const handleSelectConversation = async (id: string) => {
     setActiveConversation(id);
-    if (!messages[id]) {
-      await fetchMessages();
+    await refreshLatestMessages(id);
+  };
+  const handleOpenInfo = () => {
+    setActiveConversation(convo._id);
+    void refreshLatestMessages(convo._id);
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("flowchat:open-conversation-info", {
+          detail: { conversationId: convo._id },
+        })
+      );
+    }, 0);
+  };
+  const handleMarkAsRead = async () => {
+    try {
+      await chatService.markAsSeen(convo._id);
+      updateConversation({
+        _id: convo._id,
+        unreadCounts: { ...convo.unreadCounts, [user._id]: 0 },
+      });
+    } catch {
+      toast.error("Không thể đánh dấu cuộc trò chuyện là đã đọc.");
     }
   };
 
@@ -41,6 +96,9 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
       isActive={activeConversationId === convo._id}
       onSelect={handleSelectConversation}
       unreadCount={unreadCount}
+      infoLabel="Xem thông tin người dùng"
+      onOpenInfo={handleOpenInfo}
+      onMarkAsRead={unreadCount > 0 ? handleMarkAsRead : undefined}
       leftSection={
         <>
           <UserAvatar

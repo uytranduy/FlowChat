@@ -1,4 +1,5 @@
 import api from "@/lib/axios";
+import type { FriendRelationship } from "@/types/user";
 
 export const friendService = {
   async searchByUsername(username: string) {
@@ -22,12 +23,8 @@ export const friendService = {
   },
 
   async acceptRequest(requestId: string) {
-    try {
-      const res = await api.post(`/friends/requests/${requestId}/accept`);
-      return res.data.requestAcceptedBy;
-    } catch (error) {
-      console.error("Lỗi khi gửi acceptRequest", error);
-    }
+    const res = await api.post(`/friends/requests/${requestId}/accept`);
+    return res.data.newFriend;
   },
 
   async declineRequest(requestId: string) {
@@ -41,5 +38,10 @@ export const friendService = {
   async getFriendList() {
     const res = await api.get("/friends");
     return res.data.friends;
+  },
+
+  async getRelationship(userId: string): Promise<FriendRelationship> {
+    const res = await api.get(`/friends/relationship/${userId}`);
+    return res.data;
   },
 };

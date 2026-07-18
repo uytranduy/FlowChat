@@ -11,14 +11,10 @@ interface ProfileCardProps {
 }
 
 const ProfileCard = ({ user }: ProfileCardProps) => {
-  const { onlineUsers } = useSocketStore();
+  const { onlineUsers, isConnected } = useSocketStore();
   if (!user) return;
 
-  if (!user.bio) {
-    user.bio = "Will code for food 💻";
-  }
-
-  const isOnline = onlineUsers.includes(user._id) ? true : false;
+  const isOnline = isConnected || onlineUsers.includes(user._id);
 
   return (
     <Card className="overflow-hidden p-0 h-52 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
@@ -40,7 +36,7 @@ const ProfileCard = ({ user }: ProfileCardProps) => {
             {user.displayName}
           </h1>
 
-          {user.bio && (
+          {user.bio?.trim() && (
             <p className="text-white/70 text-sm mt-2 max-w-lg line-clamp-2">
               {user.bio}
             </p>
