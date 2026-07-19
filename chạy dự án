@@ -1,0 +1,14 @@
+-tải thư viện
+cd tới backend chạy npm i
+cd tới frontend chạy npm i
+-cài đặt .env
+cd backend tạo file 
+.env
+cd tới frontend tạo file 
+.env.production
+.env.devlopment
+-chạy chương trình
+cd tới backend chạy npm run dev
+cd tới frontend chạy npm run dev
+
+  
