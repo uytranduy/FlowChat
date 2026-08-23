@@ -1,5 +1,5 @@
 abstract final class AppConfig {
-  static const String defaultApiBaseUrl = 'http://10.0.2.2:5001/api';
+  static const String defaultApiBaseUrl = 'https://flowchat-backend-production-3.onrender.com/api';
 
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
